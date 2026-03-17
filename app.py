@@ -88,7 +88,8 @@ with col1:
 with col2:
     if st.session_state.equipments:
         dot = graphviz.Digraph(format='png')
-        dot.attr(rankdir='TB', splines='ortho', fontname='NanumGothic', nodesep='0.6', ranksep='0.9')
+        # 해상도(dpi)를 올려서 다운로드 시 화질을 더 선명하게 개선
+        dot.attr(rankdir='TB', splines='ortho', fontname='NanumGothic', nodesep='0.6', ranksep='0.9', dpi='200')
         dot.attr('node', fontname='NanumGothic', fontsize='10')
 
         comm_color = 'red' if theme == "커스텀 아이콘 (버전 2)" else 'blue'
@@ -173,12 +174,17 @@ with col2:
                     dot.edge('PROCESS', f'EQ_{i}', weight='10')
 
         # ==========================================
-        # [해결] 미리보기 화면에서도 이미지가 완벽히 보이게 처리한 부분
+        # [수정] 테마에 따른 화면 출력 방식 완벽 분리
         # ==========================================
         png_data = dot.pipe(format='png')
         
-        st.image(png_data, use_container_width=True) 
-        
+        if theme == "기본 도형 (버전 1)":
+            # 버전 1: 기존처럼 캡처하기 좋은 형태로 렌더링
+            st.graphviz_chart(dot)
+        else:
+            # 버전 2: 엑스박스 방지를 위해 완성된 사진 출력 (거대하게 늘어나는 옵션 제거)
+            st.image(png_data)
+            
         st.download_button("📥 이미지 다운로드", data=png_data, file_name="계측구성도.png", mime="image/png")
     else:
         st.info("👈 왼쪽 패널에서 설비를 추가하면 구성도가 나타납니다.")
