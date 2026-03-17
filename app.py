@@ -33,44 +33,48 @@ with col2:
         dot = graphviz.Digraph(format='png')
         dot.attr(rankdir='TB', splines='ortho', fontname='NanumGothic', nodesep='0.5', ranksep='0.6')
         
-        # 1. 범례 (Legend) 그리기
+        # 1. 좌측 범례 서브그래프 (rank='same'을 이용해 왼쪽 배치)
         with dot.subgraph(name='cluster_legend') as l:
-            l.attr(label='범례', style='filled', color='lightgrey')
-            l.node('L_W', 'W: 전력량계', shape='circle')
-            l.node('L_R', 'R: RTU', shape='square', style='filled', fillcolor='coral')
-            l.node('L_E', '■: 기존설비', shape='box', style='filled', fillcolor='#B0C4DE')
+            l.attr(label='범례', style='solid', color='black', fontname='NanumGothic')
+            l.node('LEG_W', 'W: 전력량계', shape='circle', width='0.5')
+            l.node('LEG_R', 'R: RTU', shape='square', style='filled', fillcolor='white', width='0.5')
+            l.node('LEG_C', '교체대상설비', style='filled', fillcolor='#FFEFD5', shape='box')
+            l.node('LEG_H', '효율향상설비', style='filled', fillcolor='#90EE90', shape='box')
+            l.node('LEG_Y', '연동설비', style='filled', fillcolor='#A9A9A9', shape='box')
+            # 범례 항목들을 수직으로 정렬
+            l.edge('LEG_W', 'LEG_R', style='invis')
+            l.edge('LEG_R', 'LEG_C', style='invis')
+            l.edge('LEG_C', 'LEG_H', style='invis')
+            l.edge('LEG_H', 'LEG_Y', style='invis')
 
-        # 2. 메인 구조 (한전 -> MOF -> 공정)
-        dot.node('KEPCO', '한전', fillcolor='#FFD700', style='filled', shape='box')
-        dot.node('MOF', 'MOF', fillcolor='#E0E0E0', style='filled', shape='box')
-        dot.node('PROCESS', process_name, fillcolor='#E0E0E0', style='filled', shape='box')
+        # 2. 메인 구조 (한전부터 아래로)
+        dot.node('KEPCO', '한전', fillcolor='#ADD8E6', style='filled', shape='box')
+        dot.node('MOF', 'MOF', fillcolor='white', style='filled', shape='box')
+        dot.node('PROCESS', process_name, fillcolor='#E0FFD4', style='filled', shape='box')
         dot.edge('KEPCO', 'MOF')
         dot.edge('MOF', 'PROCESS')
 
-        # 3. RTU 및 설비 배치
-        # RTU들을 먼저 생성
+        # 3. RTU 및 설비
         for r in range(rtu_count):
             rtu_name = f"RTU-{r+1}"
-            dot.node(rtu_name, 'R', shape='square', color='coral', style='filled', fillcolor='white')
-            dot.edge('MOF', rtu_name, style='dashed', color='saddlebrown')
+            dot.node(rtu_name, 'R', shape='square', color='red', style='filled', fillcolor='white')
+            dot.edge('MOF', rtu_name, style='dashed', color='red')
 
         with dot.subgraph(name='cluster_equip') as c:
-            c.attr(style='dashed', color='gray', label='설비군')
+            c.attr(style='dashed', color='gray')
             for i, eq in enumerate(st.session_state.equipments):
                 eq_id = f'EQ_{i}'
-                color_map = {"기존설비": "#B0C4DE", "교체(신규)설비": "#90EE90", "연동설비": "#D3D3D3"}
-                c.node(eq_id, f"{eq['name']}\n{eq['desc']}\n({eq['kw']})", fillcolor=color_map.get(eq['type']), style='filled', shape='box')
+                # 색상 매핑 수정 (교체/효율/연동)
+                color_map = {"교체대상설비": "#FFEFD5", "효율향상설비": "#90EE90", "연동설비": "#A9A9A9"}
+                c.node(eq_id, f"{eq['name']}\n{eq['desc']}\n({eq['kw']})", 
+                       fillcolor=color_map.get(eq['type'], 'white'), style='filled', shape='box')
                 
-                # 전력량계가 있다면 W 생성
                 if eq['has_w']:
                     w_id = f'W_{i}'
                     c.node(w_id, 'W', shape='circle')
                     c.edge(w_id, eq_id)
                     dot.edge('PROCESS', w_id)
-                    dot.edge(eq['rtu'], w_id, style='dashed', color='darkblue')
-                else:
-                    # 전력량계 없으면 바로 연결
-                    dot.edge('PROCESS', eq_id)
-
+                    dot.edge(eq['rtu'], w_id, color='red')
+        
         st.graphviz_chart(dot)
         st.download_button("📥 이미지 다운로드", data=dot.pipe(format='png'), file_name="계측구성도.png", mime="image/png")
