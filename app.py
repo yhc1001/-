@@ -4,9 +4,6 @@ import os
 
 st.set_page_config(page_title="계측구성도 설계기", layout="wide")
 
-# ==========================================
-# [해결 핵심] 절대 경로 인식
-# ==========================================
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 
 # ==========================================
@@ -32,6 +29,11 @@ def add_equipment():
     })
     st.session_state.new_desc = f"#{len(st.session_state.equipments) + 1}"
 
+# [해결 핵심] 에러 화면(StreamlitAPIException)을 방지하는 안전한 초기화 함수
+def reset_all():
+    st.session_state.equipments =[]
+    st.session_state.new_desc = "#1"
+
 # ==========================================
 # 2. 메인 화면 레이아웃
 # ==========================================
@@ -55,7 +57,7 @@ with col1:
     st.text_input("설비명", key='new_name')
     st.text_input("호기", key='new_desc')
     st.text_input("용량", key='new_kw')
-    st.selectbox("구분", ["기존설비", "효율설비", "연동설비"], key='new_type')
+    st.selectbox("구분",["기존설비", "효율설비", "연동설비"], key='new_type')
     st.checkbox("전력량계(W) 설치 (체크 해제 시 직접 연결)", key='new_has_w')
     
     rtu_list =[f"RTU-{i+1}" for i in range(rtu_count)]
@@ -63,10 +65,8 @@ with col1:
     
     st.button("➕ 설비 추가", on_click=add_equipment, type="primary")
 
-    if st.button("🗑️ 전체 초기화"):
-        st.session_state.equipments =[]
-        st.session_state.new_desc = "#1"
-        st.rerun()
+    # on_click을 사용하여 에러 없이 안전하게 초기화
+    st.button("🗑️ 전체 초기화", on_click=reset_all)
 
     st.markdown("---")
     st.subheader("3. 추가된 설비 개별 수정")
@@ -83,19 +83,89 @@ with col1:
             st.rerun()
 
 # ==========================================
-# 3. 다이어그램 렌더링 
+# 3. 다이어그램 렌더링 (V1과 V2를 완전히 분리)
 # ==========================================
 with col2:
     if st.session_state.equipments:
-        dot = graphviz.Digraph(format='png')
-        # 해상도(dpi)를 올려서 다운로드 시 화질을 더 선명하게 개선
-        dot.attr(rankdir='TB', splines='ortho', fontname='NanumGothic', nodesep='0.6', ranksep='0.9', dpi='200')
-        dot.attr('node', fontname='NanumGothic', fontsize='10')
+        
+        # ---------------------------------------------------------
+        # 🟢 [버전 1] 오리지널 코드 (100% 원본 그대로 보존, 수정 금지)
+        # ---------------------------------------------------------
+        if theme == "기본 도형 (버전 1)":
+            dot = graphviz.Digraph(format='png')
+            dot.attr(rankdir='TB', splines='ortho', fontname='NanumGothic', nodesep='0.4', ranksep='0.8')
+            dot.attr('node', fontname='NanumGothic', shape='box', style='filled', fillcolor='white', fontsize='9')
 
-        comm_color = 'red' if theme == "커스텀 아이콘 (버전 2)" else 'blue'
+            dot.node('KEPCO', '한전', fillcolor='#FFD700', width='1.0')
+            dot.node('MOF', 'MOF', fillcolor='#E0E0E0', width='1.0')
+            dot.edge('KEPCO', 'MOF')
 
-        def draw_node(node_id, label, v1_shape, v1_color, v2_img, v2_w, v2_h):
-            if theme == "커스텀 아이콘 (버전 2)":
+            dot.node('EER', 'EER 서버\n(한국에너지공단)', fillcolor='#ADD8E6', width='1.2')
+            dot.edge('MOF', 'EER', style='dashed', color='saddlebrown')
+
+            with dot.subgraph() as s_mid:
+                s_mid.attr(rank='same')
+                s_mid.node('PROCESS', process_name, fillcolor='#E0E0E0', width='1.0')
+                rtu_nodes =[]
+                for r in range(rtu_count):
+                    rtu_name = f"RTU-{r+1}"
+                    s_mid.node(rtu_name, 'R', shape='square', color='coral', fontcolor='red', style='bold,filled', fillcolor='white', width='0.3')
+                    rtu_nodes.append(rtu_name)
+                
+                if rtu_count > 0:
+                    s_mid.edge('PROCESS', rtu_nodes[0], style='invis')
+                    for r in range(rtu_count - 1):
+                        s_mid.edge(rtu_nodes[r], rtu_nodes[r+1], style='invis')
+
+            dot.edge('MOF', 'PROCESS')
+            for r in range(rtu_count):
+                rtu_name = f"RTU-{r+1}"
+                dot.edge('MOF', rtu_name, style='dashed', color='saddlebrown')
+                dot.edge(rtu_name, 'EER', style='dashed', color='saddlebrown')
+
+            with dot.subgraph(name='cluster_equip') as c:
+                c.attr(style='dashed', color='gray') 
+                color_map = {"기존설비": "#B0C4DE", "효율설비": "#C1E1C1", "연동설비": "#A9A9A9"}
+                
+                with c.subgraph() as s_w:
+                    s_w.attr(rank='same')
+                    for i, eq in enumerate(st.session_state.equipments):
+                        if eq['has_w']:
+                            s_w.node(f'W_{i}', 'W', shape='circle', width='0.4')
+                        else:
+                            s_w.node(f'W_{i}', '', shape='none', width='0', height='0')
+
+                with c.subgraph() as s_eq:
+                    s_eq.attr(rank='same')
+                    for i, eq in enumerate(st.session_state.equipments):
+                        s_eq.node(f'EQ_{i}', f"{eq['name']}\n{eq['desc']}\n({eq['kw']})", 
+                                  fillcolor=color_map.get(eq['type']), style='filled', shape='box', width='0.8')
+                    
+                    for i in range(len(st.session_state.equipments) - 1):
+                        s_eq.edge(f'EQ_{i}', f'EQ_{i+1}', style='invis')
+
+                for i, eq in enumerate(st.session_state.equipments):
+                    if eq['has_w']:
+                        dot.edge('PROCESS', f'W_{i}', weight='10')
+                        c.edge(f'W_{i}', f'EQ_{i}', weight='10')
+                        dot.edge(eq['rtu'], f'W_{i}', style='dashed', color='blue', constraint='false')
+                    else:
+                        dot.edge('PROCESS', f'EQ_{i}', weight='10')
+
+            # 버전 1 렌더링 (SVG 방식)
+            st.graphviz_chart(dot)
+            st.download_button("📥 이미지 다운로드 (버전 1)", data=dot.pipe(format='png'), file_name="계측구성도_버전1.png", mime="image/png")
+
+
+        # ---------------------------------------------------------
+        # 🔴 [버전 2] 캔바 커스텀 아이콘 코드 (미친듯한 팽창 억제)
+        # ---------------------------------------------------------
+        else:
+            dot = graphviz.Digraph(format='png')
+            dot.attr(rankdir='TB', splines='ortho', fontname='NanumGothic', nodesep='0.6', ranksep='0.9')
+            dot.attr('node', fontname='NanumGothic', fontsize='10')
+
+            def draw_v2_node(node_id, label, v2_img, v2_w, v2_h):
                 if v2_img == 'PROCESS_PILL':
                     dot.node(node_id, label, shape='box', style='rounded,filled', fillcolor='#E0E0E0', width='1.5', height='0.5')
                 else:
@@ -104,87 +174,68 @@ with col2:
                         dot.node(node_id, label, shape='none', image=img_path, labelloc='b', imagescale='true', fixedsize='true', width=v2_w, height=v2_h)
                     else:
                         dot.node(node_id, f"[이미지 누락]\n{v2_img}", shape='box', color='red', fontcolor='red')
-            else:
-                if v1_shape == 'bold_square': 
-                    dot.node(node_id, label, shape='square', color='coral', fontcolor='red', style='bold,filled', fillcolor='white', width='0.3')
-                else:
-                    dot.node(node_id, label, shape=v1_shape, style='filled', fillcolor=v1_color, width='1.0' if v1_shape=='box' else '0.4')
 
-        draw_node('KEPCO', '한전' if theme == "기본 도형 (버전 1)" else '', 'box', '#FFD700', '한전.png', '1.2', '0.5')
-        draw_node('MOF', 'MOF' if theme == "기본 도형 (버전 1)" else '', 'box', '#E0E0E0', 'MOF.png', '1.2', '0.5')
-        draw_node('EER', 'EER 서버\n(한국에너지공단)' if theme == "기본 도형 (버전 1)" else '', 'box', '#ADD8E6', 'EER.png', '1.5', '1.0')
+            draw_v2_node('KEPCO', '', '한전.png', '1.2', '0.6')
+            draw_v2_node('MOF', '', 'MOF.png', '1.2', '0.6')
+            draw_v2_node('EER', '', 'EER.png', '1.5', '1.0')
 
-        dot.edge('KEPCO', 'MOF')
-        dot.edge('MOF', 'EER', style='dashed', color='saddlebrown')
+            dot.edge('KEPCO', 'MOF')
+            dot.edge('MOF', 'EER', style='dashed', color='saddlebrown')
 
-        with dot.subgraph() as s_mid:
-            s_mid.attr(rank='same')
-            draw_node('PROCESS', process_name, 'box', '#E0E0E0', 'PROCESS_PILL', '1.5', '0.5')
-            
-            rtu_nodes =[]
+            with dot.subgraph() as s_mid:
+                s_mid.attr(rank='same')
+                draw_v2_node('PROCESS', process_name, 'PROCESS_PILL', '1.5', '0.5')
+                
+                rtu_nodes =[]
+                for r in range(rtu_count):
+                    rtu_name = f"RTU-{r+1}"
+                    draw_v2_node(rtu_name, '', 'RTU.png', '0.8', '0.8')
+                    rtu_nodes.append(rtu_name)
+                
+                if rtu_count > 0:
+                    s_mid.edge('PROCESS', rtu_nodes[0], style='invis')
+                    for r in range(rtu_count - 1):
+                        s_mid.edge(rtu_nodes[r], rtu_nodes[r+1], style='invis')
+
+            dot.edge('MOF', 'PROCESS')
             for r in range(rtu_count):
                 rtu_name = f"RTU-{r+1}"
-                draw_node(rtu_name, 'R' if theme == "기본 도형 (버전 1)" else '', 'bold_square', 'white', 'RTU.png', '0.8', '0.8')
-                rtu_nodes.append(rtu_name)
-            
-            if rtu_count > 0:
-                s_mid.edge('PROCESS', rtu_nodes[0], style='invis')
-                for r in range(rtu_count - 1):
-                    s_mid.edge(rtu_nodes[r], rtu_nodes[r+1], style='invis')
+                dot.edge('MOF', rtu_name, style='dashed', color='saddlebrown')
+                dot.edge(rtu_name, 'EER', style='dashed', color='red')
 
-        dot.edge('MOF', 'PROCESS')
-        for r in range(rtu_count):
-            rtu_name = f"RTU-{r+1}"
-            dot.edge('MOF', rtu_name, style='dashed', color='saddlebrown')
-            dot.edge(rtu_name, 'EER', style='dashed', color='red')
+            with dot.subgraph(name='cluster_equip') as c:
+                c.attr(style='dashed', color='gray') 
+                
+                with c.subgraph() as s_w:
+                    s_w.attr(rank='same')
+                    for i, eq in enumerate(st.session_state.equipments):
+                        if eq['has_w']:
+                            draw_v2_node(f'W_{i}', '', '전력량계.png', '0.6', '0.6')
+                        else:
+                            s_w.node(f'W_{i}', '', shape='none', width='0', height='0')
 
-        with dot.subgraph(name='cluster_equip') as c:
-            c.attr(style='dashed', color='gray') 
-            color_map = {"기존설비": "#B0C4DE", "효율설비": "#C1E1C1", "연동설비": "#B0C4DE"} 
-            
-            with c.subgraph() as s_w:
-                s_w.attr(rank='same')
+                with c.subgraph() as s_eq:
+                    s_eq.attr(rank='same')
+                    for i, eq in enumerate(st.session_state.equipments):
+                        eq_label = f"{eq['name']}\n{eq['desc']}\n({eq['kw']})"
+                        img_file = '효율공기압축기.png' if eq['type'] == '효율설비' else '기존공기압축기.png'
+                        draw_v2_node(f'EQ_{i}', eq_label, img_file, '1.2', '1.0')
+                    
+                    for i in range(len(st.session_state.equipments) - 1):
+                        s_eq.edge(f'EQ_{i}', f'EQ_{i+1}', style='invis')
+
                 for i, eq in enumerate(st.session_state.equipments):
                     if eq['has_w']:
-                        draw_node(f'W_{i}', 'W' if theme == "기본 도형 (버전 1)" else '', 'circle', 'white', '전력량계.png', '0.6', '0.6')
+                        dot.edge('PROCESS', f'W_{i}', weight='10')
+                        c.edge(f'W_{i}', f'EQ_{i}', weight='10')
+                        dot.edge(eq['rtu'], f'W_{i}', style='solid', color='red', constraint='false')
                     else:
-                        s_w.node(f'W_{i}', '', shape='none', width='0', height='0')
+                        dot.edge('PROCESS', f'EQ_{i}', weight='10')
 
-            with c.subgraph() as s_eq:
-                s_eq.attr(rank='same')
-                for i, eq in enumerate(st.session_state.equipments):
-                    eq_label = f"{eq['name']}\n{eq['desc']}\n({eq['kw']})"
-                    
-                    if theme == "커스텀 아이콘 (버전 2)":
-                        img_file = '효율공기압축기.png' if eq['type'] == '효율설비' else '기존공기압축기.png'
-                        draw_node(f'EQ_{i}', eq_label, '', '', img_file, '1.2', '1.0')
-                    else:
-                        bg_color = color_map.get(eq['type'])
-                        draw_node(f'EQ_{i}', eq_label, 'box', bg_color, '', '', '')
-                
-                for i in range(len(st.session_state.equipments) - 1):
-                    s_eq.edge(f'EQ_{i}', f'EQ_{i+1}', style='invis')
+            # 버전 2 렌더링 (원래의 아담한 픽셀 크기로 엑스박스 없이 출력)
+            png_data = dot.pipe(format='png')
+            st.image(png_data) # 크기를 폭발시키는 use_container_width 옵션 삭제
+            st.download_button("📥 이미지 다운로드 (버전 2)", data=png_data, file_name="계측구성도_버전2.png", mime="image/png")
 
-            for i, eq in enumerate(st.session_state.equipments):
-                if eq['has_w']:
-                    dot.edge('PROCESS', f'W_{i}', weight='10')
-                    c.edge(f'W_{i}', f'EQ_{i}', weight='10')
-                    dot.edge(eq['rtu'], f'W_{i}', style='solid' if theme == "커스텀 아이콘 (버전 2)" else 'dashed', color=comm_color, constraint='false')
-                else:
-                    dot.edge('PROCESS', f'EQ_{i}', weight='10')
-
-        # ==========================================
-        # [수정] 테마에 따른 화면 출력 방식 완벽 분리
-        # ==========================================
-        png_data = dot.pipe(format='png')
-        
-        if theme == "기본 도형 (버전 1)":
-            # 버전 1: 기존처럼 캡처하기 좋은 형태로 렌더링
-            st.graphviz_chart(dot)
-        else:
-            # 버전 2: 엑스박스 방지를 위해 완성된 사진 출력 (거대하게 늘어나는 옵션 제거)
-            st.image(png_data)
-            
-        st.download_button("📥 이미지 다운로드", data=png_data, file_name="계측구성도.png", mime="image/png")
     else:
         st.info("👈 왼쪽 패널에서 설비를 추가하면 구성도가 나타납니다.")
