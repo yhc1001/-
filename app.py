@@ -12,7 +12,6 @@ col1, col2 = st.columns([1, 3])
 
 with col1:
     st.subheader("1. 공정 및 설비 관리")
-    # 공정명 수정 기능 복구
     process_name = st.text_input("메인 공정명", "반도체 공정")
     
     with st.expander("➕ 새 설비 추가", expanded=True):
@@ -41,13 +40,15 @@ with col1:
 with col2:
     if st.session_state.equipments:
         dot = graphviz.Digraph(format='png')
-        dot.attr(rankdir='TB', splines='ortho', fontname='Malgun Gothic', nodesep='0.5', ranksep='0.6')
-        dot.attr('node', fontname='Malgun Gothic', shape='box', style='filled', fillcolor='white')
+        # 폰트 설정: NanumGothic으로 통일 (리눅스 서버에서 인식 가능)
+        dot.attr(rankdir='TB', splines='ortho', fontname='NanumGothic', nodesep='0.5', ranksep='0.6')
+        dot.attr('node', fontname='NanumGothic', shape='box', style='filled', fillcolor='white')
+        dot.attr('edge', fontname='NanumGothic')
         
         # 최상단: 한전
         dot.node('KEPCO', '한전', fillcolor='#FFD700', width='1.5')
         
-        # 중간: MOF와 공정 (공정명은 입력값 사용)
+        # 중간: MOF와 공정
         dot.node('MOF', 'MOF', fillcolor='#E0E0E0', width='1.5')
         dot.node('PROCESS', process_name, fillcolor='#E0E0E0', width='1.5')
         
@@ -58,14 +59,12 @@ with col2:
         # 계통 연결 (수직)
         dot.edge('KEPCO', 'MOF')
         dot.edge('MOF', 'PROCESS')
-        # 코드 내에서 폰트 경로를 지정
-        dot.attr(fontname='malgun') # 파일명(확장자 제외)
-        dot.attr('node', fontname='malgun', ...)
+        
         # 통신 연결
         dot.edge('MOF', 'EER', style='dashed', color='saddlebrown')
         dot.edge('RTU', 'EER', style='dashed', color='saddlebrown')
         
-        # RTU는 설비들과 연결되므로 process와 같은 위치 근처로 잡아줌
+        # RTU와 PROCESS 배치
         with dot.subgraph() as s:
             s.attr(rank='same')
             s.node('RTU')
