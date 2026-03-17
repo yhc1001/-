@@ -5,7 +5,7 @@ import os
 st.set_page_config(page_title="계측구성도 설계기", layout="wide")
 
 # ==========================================
-# [해결 핵심] 현재 코드가 실행 중인 폴더의 '절대 경로'를 알아냅니다.
+# [해결 핵심] 절대 경로 인식
 # ==========================================
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 
@@ -55,7 +55,7 @@ with col1:
     st.text_input("설비명", key='new_name')
     st.text_input("호기", key='new_desc')
     st.text_input("용량", key='new_kw')
-    st.selectbox("구분",["기존설비", "효율설비", "연동설비"], key='new_type')
+    st.selectbox("구분", ["기존설비", "효율설비", "연동설비"], key='new_type')
     st.checkbox("전력량계(W) 설치 (체크 해제 시 직접 연결)", key='new_has_w')
     
     rtu_list =[f"RTU-{i+1}" for i in range(rtu_count)]
@@ -93,32 +93,22 @@ with col2:
 
         comm_color = 'red' if theme == "커스텀 아이콘 (버전 2)" else 'blue'
 
-        # ----------------------------------------
-        # [노드 생성 함수] 이미지 절대 경로 인식 및 오류 디버깅 추가
-        # ----------------------------------------
         def draw_node(node_id, label, v1_shape, v1_color, v2_img, v2_w, v2_h):
             if theme == "커스텀 아이콘 (버전 2)":
                 if v2_img == 'PROCESS_PILL':
-                    # 공정 노드는 이미지 없이 알약 모양
                     dot.node(node_id, label, shape='box', style='rounded,filled', fillcolor='#E0E0E0', width='1.5', height='0.5')
                 else:
-                    # [해결 핵심] 서버 컴퓨터 환경에 맞게 정확한 파일 주소(절대 경로) 조합
                     img_path = os.path.join(BASE_DIR, v2_img).replace('\\', '/')
-                    
-                    # 파일이 서버에 실제로 존재하는지 확인!
                     if os.path.exists(img_path):
                         dot.node(node_id, label, shape='none', image=img_path, labelloc='b', imagescale='true', fixedsize='true', width=v2_w, height=v2_h)
                     else:
-                        # ⚠️ 만약 파일명 오타 등으로 못 찾으면 빨간색 에러 상자를 띄워줌
                         dot.node(node_id, f"[이미지 누락]\n{v2_img}", shape='box', color='red', fontcolor='red')
             else:
-                # 버전 1 
                 if v1_shape == 'bold_square': 
                     dot.node(node_id, label, shape='square', color='coral', fontcolor='red', style='bold,filled', fillcolor='white', width='0.3')
                 else:
                     dot.node(node_id, label, shape=v1_shape, style='filled', fillcolor=v1_color, width='1.0' if v1_shape=='box' else '0.4')
 
-        # 1. 상단 핵심 노드 배치
         draw_node('KEPCO', '한전' if theme == "기본 도형 (버전 1)" else '', 'box', '#FFD700', '한전.png', '1.2', '0.5')
         draw_node('MOF', 'MOF' if theme == "기본 도형 (버전 1)" else '', 'box', '#E0E0E0', 'MOF.png', '1.2', '0.5')
         draw_node('EER', 'EER 서버\n(한국에너지공단)' if theme == "기본 도형 (버전 1)" else '', 'box', '#ADD8E6', 'EER.png', '1.5', '1.0')
@@ -126,7 +116,6 @@ with col2:
         dot.edge('KEPCO', 'MOF')
         dot.edge('MOF', 'EER', style='dashed', color='saddlebrown')
 
-        # 2. 공정과 RTU 배치
         with dot.subgraph() as s_mid:
             s_mid.attr(rank='same')
             draw_node('PROCESS', process_name, 'box', '#E0E0E0', 'PROCESS_PILL', '1.5', '0.5')
@@ -148,7 +137,6 @@ with col2:
             dot.edge('MOF', rtu_name, style='dashed', color='saddlebrown')
             dot.edge(rtu_name, 'EER', style='dashed', color='red')
 
-        # 3. 설비 클러스터 영역
         with dot.subgraph(name='cluster_equip') as c:
             c.attr(style='dashed', color='gray') 
             color_map = {"기존설비": "#B0C4DE", "효율설비": "#C1E1C1", "연동설비": "#B0C4DE"} 
@@ -176,7 +164,6 @@ with col2:
                 for i in range(len(st.session_state.equipments) - 1):
                     s_eq.edge(f'EQ_{i}', f'EQ_{i+1}', style='invis')
 
-            # 실제 선 연결
             for i, eq in enumerate(st.session_state.equipments):
                 if eq['has_w']:
                     dot.edge('PROCESS', f'W_{i}', weight='10')
@@ -185,11 +172,13 @@ with col2:
                 else:
                     dot.edge('PROCESS', f'EQ_{i}', weight='10')
 
-           png_data = dot.pipe(format='png')
+        # ==========================================
+        # [해결] 미리보기 화면에서도 이미지가 완벽히 보이게 처리한 부분
+        # ==========================================
+        png_data = dot.pipe(format='png')
         
-            # [핵심] Graphviz 차트 대신, 완성된 사진(png_data)을 화면에 직접 띄웁니다!
-            st.image(png_data, use_container_width=True) 
+        st.image(png_data, use_container_width=True) 
         
-            st.download_button("📥 이미지 다운로드", data=png_data, file_name="계측구성도.png", mime="image/png")
-        else:
-            st.info("👈 왼쪽 패널에서 설비를 추가하면 구성도가 나타납니다.")
+        st.download_button("📥 이미지 다운로드", data=png_data, file_name="계측구성도.png", mime="image/png")
+    else:
+        st.info("👈 왼쪽 패널에서 설비를 추가하면 구성도가 나타납니다.")
