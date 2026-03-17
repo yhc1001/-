@@ -63,20 +63,26 @@ with col2:
             dot.node(rtu_name, 'R', shape='square', color='coral', style='filled', fillcolor='white', width='0.3', height='0.3')
             dot.edge('MOF', rtu_name, style='dashed', color='saddlebrown')
 
-        with dot.subgraph(name='cluster_equip') as c:
-            c.attr(style='dashed', color='gray')
+         with dot.subgraph(name='cluster_equip') as c:
+            c.attr(style='dashed', color='gray', ordering='in') # ordering='in'으로 순서 고정
+            
+            # 설비들을 순서대로 배치하기 위해 노드 추가 시 번호를 활용
             for i, eq in enumerate(st.session_state.equipments):
                 eq_id = f'EQ_{i}'
-                color_map = {"기존설비": "#B0C4DE", "교체(신규)설비": "#FFDAB9", "효율설비": "#C1E1C1", "연동설비": "#A9A9A9"}
+                # ... (색상 매핑 동일)
                 c.node(eq_id, f"{eq['name']}\n{eq['desc']}\n({eq['kw']})", 
-                       fillcolor=color_map.get(eq['type'], 'white'), style='filled', shape='box', width='0.6')
+                       fillcolor=color_map.get(eq['type'], 'white'), style='filled', shape='box', width='0.7')
                 
                 if eq['has_w']:
                     w_id = f'W_{i}'
-                    c.node(w_id, 'W', shape='circle', width='0.25', height='0.25') # 원 크기 축소
-                    c.edge(w_id, eq_id)
-                    dot.edge('PROCESS', w_id)
-                    dot.edge(eq['rtu'], w_id, style='dashed', color='darkblue')
+                    # W 노드 크기 고정
+                    c.node(w_id, 'W', shape='circle', width='0.3', height='0.3')
+                    # 설비와 W 연결 (화살표 꼬임 방지)
+                    c.edge(w_id, eq_id, dir='forward')
+                    # 공정과 W 연결
+                    dot.edge('PROCESS', w_id, dir='forward')
+                    # RTU와 W 연결
+                    dot.edge(eq['rtu'], w_id, style='dashed', color='blue', dir='forward')
         
         st.graphviz_chart(dot)
         st.download_button("📥 이미지 다운로드", data=dot.pipe(format='png'), file_name="계측구성도.png", mime="image/png")
