@@ -58,7 +58,9 @@ with col2:
         # 계통 연결 (수직)
         dot.edge('KEPCO', 'MOF')
         dot.edge('MOF', 'PROCESS')
-        
+        # 코드 내에서 폰트 경로를 지정
+        dot.attr(fontname='malgun') # 파일명(확장자 제외)
+        dot.attr('node', fontname='malgun', ...)
         # 통신 연결
         dot.edge('MOF', 'EER', style='dashed', color='saddlebrown')
         dot.edge('RTU', 'EER', style='dashed', color='saddlebrown')
