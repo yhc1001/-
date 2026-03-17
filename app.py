@@ -185,7 +185,11 @@ with col2:
                 else:
                     dot.edge('PROCESS', f'EQ_{i}', weight='10')
 
-        st.graphviz_chart(dot)
-        st.download_button("📥 이미지 다운로드", data=dot.pipe(format='png'), file_name="계측구성도.png", mime="image/png")
+       png_data = dot.pipe(format='png')
+        
+        # [핵심] Graphviz 차트 대신, 완성된 사진(png_data)을 화면에 직접 띄웁니다!
+        st.image(png_data, use_container_width=True) 
+        
+        st.download_button("📥 이미지 다운로드", data=png_data, file_name="계측구성도.png", mime="image/png")
     else:
         st.info("👈 왼쪽 패널에서 설비를 추가하면 구성도가 나타납니다.")
