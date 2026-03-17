@@ -31,27 +31,28 @@ with col1:
 with col2:
     if st.session_state.equipments:
         dot = graphviz.Digraph(format='png')
-        dot.attr(rankdir='TB', splines='ortho', fontname='NanumGothic', nodesep='0.3', ranksep='0.4')
-        dot.attr('node', fontname='NanumGothic', shape='box', style='filled', fillcolor='white', fontsize='9')
-        
-        # 1. 범례 (Legend) 독립 배치
-        # 겹치지 않게 노드명 앞에 LEG_ 접두사 사용
-        dot.node('LEG_W', 'W: 전력량계', shape='circle', style='filled', fillcolor='white', width='0.4', height='0.4')
-        dot.node('LEG_R', 'R: RTU', shape='square', style='filled', fillcolor='#FFDAB9', color='coral')
-        dot.node('LEG_G', '■: 기존설비', shape='box', style='filled', fillcolor='#B0C4DE')
-        dot.node('LEG_E', '■: 효율설비', shape='box', style='filled', fillcolor='#C1E1C1')
-        
-        # 범례 정렬 (왼쪽 끝에 세로로 정렬)
-        with dot.subgraph() as l:
-            l.attr(rank='same')
+        # 전체 그래프 설정
+        dot.attr(rankdir='TB', splines='ortho', fontname='NanumGothic', nodesep='0.2', ranksep='0.3')
+        dot.attr('node', fontname='NanumGothic', shape='box', style='filled', fillcolor='white', fontsize='8')
+
+        # 1. 범례 배치 (rankdir='LR'을 사용하여 왼쪽에서 오른쪽으로 한 줄로 정렬)
+        with dot.subgraph(name='cluster_legend') as l:
+            l.attr(label='', style='invis', rankdir='LR') # 테두리 숨김
+            l.node('LEG_W', 'W: 전력량계', shape='circle', width='0.25', height='0.25', fontsize='8')
+            l.node('LEG_R', 'R: RTU', shape='square', width='0.3', height='0.3', fontsize='8')
+            l.node('LEG_G', '■: 기존설비', shape='box', fillcolor='#B0C4DE', fontsize='8')
+            l.node('LEG_E', '■: 효율설비', shape='box', fillcolor='#C1E1C1', fontsize='8')
+            l.node('LEG_Y', '■: 연동설비', shape='box', fillcolor='#A9A9A9', fontsize='8')
+            # 일렬로 연결 (수평 정렬)
             l.edge('LEG_W', 'LEG_R', style='invis')
             l.edge('LEG_R', 'LEG_G', style='invis')
             l.edge('LEG_G', 'LEG_E', style='invis')
+            l.edge('LEG_E', 'LEG_Y', style='invis')
 
         # 2. 메인 구조
-        dot.node('KEPCO', '한전', fillcolor='#FFD700', width='1.0')
-        dot.node('MOF', 'MOF', fillcolor='#E0E0E0', width='1.0')
-        dot.node('PROCESS', process_name, fillcolor='#E0E0E0', width='1.0')
+        dot.node('KEPCO', '한전', fillcolor='#FFD700', width='0.8', height='0.4')
+        dot.node('MOF', 'MOF', fillcolor='#E0E0E0', width='0.8', height='0.4')
+        dot.node('PROCESS', process_name, fillcolor='#E0E0E0', width='0.8', height='0.4')
         
         dot.edge('KEPCO', 'MOF')
         dot.edge('MOF', 'PROCESS')
@@ -59,21 +60,20 @@ with col2:
         # 3. RTU 및 설비
         for r in range(rtu_count):
             rtu_name = f"RTU-{r+1}"
-            dot.node(rtu_name, 'R', shape='square', color='coral', style='filled', fillcolor='#FFDAB9')
+            dot.node(rtu_name, 'R', shape='square', color='coral', style='filled', fillcolor='white', width='0.3', height='0.3')
             dot.edge('MOF', rtu_name, style='dashed', color='saddlebrown')
 
         with dot.subgraph(name='cluster_equip') as c:
-            c.attr(style='dashed', color='gray', label='')
+            c.attr(style='dashed', color='gray')
             for i, eq in enumerate(st.session_state.equipments):
                 eq_id = f'EQ_{i}'
-                # 색상 매핑
                 color_map = {"기존설비": "#B0C4DE", "교체(신규)설비": "#FFDAB9", "효율설비": "#C1E1C1", "연동설비": "#A9A9A9"}
                 c.node(eq_id, f"{eq['name']}\n{eq['desc']}\n({eq['kw']})", 
-                       fillcolor=color_map.get(eq['type'], 'white'), style='filled', shape='box', width='0.8')
+                       fillcolor=color_map.get(eq['type'], 'white'), style='filled', shape='box', width='0.6')
                 
                 if eq['has_w']:
                     w_id = f'W_{i}'
-                    c.node(w_id, 'W', shape='circle', width='0.4')
+                    c.node(w_id, 'W', shape='circle', width='0.25', height='0.25') # 원 크기 축소
                     c.edge(w_id, eq_id)
                     dot.edge('PROCESS', w_id)
                     dot.edge(eq['rtu'], w_id, style='dashed', color='darkblue')
