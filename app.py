@@ -86,13 +86,11 @@ with col2:
     if st.session_state.equipments:
         
         # ---------------------------------------------------------
-        # 🟢 [버전 1] 기본 도형 테마
+        # 🟢[버전 1] 기본 도형 테마
         # ---------------------------------------------------------
         if theme == "기본 도형 (버전 1)":
             dot = graphviz.Digraph(format='png')
-            # [해결 1] 범례 가출 방지를 위한 글로벌 속성 (매우 중요)
-            dot.attr(newrank='true')
-            # 적당한 상하 간격(0.5)과 좁은 좌우 간격(0.15) 세팅
+            dot.attr(newrank='true') 
             dot.attr(rankdir='TB', splines='ortho', fontname='NanumGothic', nodesep='0.15', ranksep='0.5')
             dot.attr('node', fontname='NanumGothic', shape='box', style='filled', fillcolor='white', fontsize='9')
 
@@ -107,7 +105,6 @@ with col2:
                     elif key == 'eff': leg.node(f'leg_i_{key}', '', shape='box', style='filled', fillcolor='#C1E1C1', width='0.3', height='0.25', fixedsize='true')
                     elif key == 'link': leg.node(f'leg_i_{key}', '', shape='box', style='filled', fillcolor='#D3D3D3', width='0.3', height='0.25', fixedsize='true') 
                     
-                    # 텍스트 여백을 최소화하여 아이콘과 초밀착
                     leg.node(f'leg_t_{key}', text, shape='none', fontsize='10', fillcolor='transparent', margin='0', width='0', height='0')
 
                 for key, text in items:
@@ -120,17 +117,15 @@ with col2:
                 for i in range(len(items)-1):
                     leg.edge(f'leg_i_{items[i][0]}', f'leg_i_{items[i+1][0]}', style='invis', weight='100')
 
-            # [해결 2] 한전 노드를 범례 텍스트와 완벽히 같은 줄에 고정 (가출 현상 없음)
             with dot.subgraph() as top_align:
                 top_align.attr(rank='same')
                 top_align.node('leg_i_w') 
                 top_align.node('KEPCO', '한전', fillcolor='#FFD700', width='1.0')
-                top_align.edge('leg_i_w', 'KEPCO', style='invis', minlen='4') # 우측으로 밀어냄
+                top_align.edge('leg_i_w', 'KEPCO', style='invis', minlen='4')
 
             dot.node('MOF', 'MOF', fillcolor='#E0E0E0', width='1.0')
-            dot.edge('KEPCO', 'MOF', weight='100') # 수직 뼈대 강화
+            dot.edge('KEPCO', 'MOF', weight='100')
 
-            # [해결 3] 공정, RTU, EER 서버를 완벽한 일렬횡대로 묶음
             with dot.subgraph() as s_mid:
                 s_mid.attr(rank='same')
                 s_mid.node('PROCESS', process_name, fillcolor='#E0E0E0', width='1.0')
@@ -143,7 +138,6 @@ with col2:
                 
                 s_mid.node('EER', 'EER 서버\n(한국에너지공단)', fillcolor='#ADD8E6', width='1.2')
                 
-                # 좌우 배치 간격 설정
                 if rtu_count > 0:
                     s_mid.edge('PROCESS', rtu_nodes[0], style='invis', minlen='2')
                     for r in range(rtu_count - 1):
@@ -152,14 +146,13 @@ with col2:
                 else:
                     s_mid.edge('PROCESS', 'EER', style='invis', minlen='3')
 
-            dot.edge('MOF', 'PROCESS', weight='100') # 수직 뼈대 강화
+            dot.edge('MOF', 'PROCESS', weight='100')
             
-            # [해결 4] 통신선이 도면 구조를 파괴하지 못하게 constraint='false' 속성 부여 (꼬임 원천 차단)
+            # [수정 1] 불필요한 MOF->RTU, MOF->EER 점선 삭제 (데이터 흐름 최적화)
             for r in range(rtu_count):
                 rtu_name = f"RTU-{r+1}"
-                dot.edge('MOF', rtu_name, style='dashed', color='saddlebrown', constraint='false')
+                # 통신선: RTU -> EER 서버만 유지
                 dot.edge(rtu_name, 'EER', style='dashed', color='saddlebrown', constraint='false') 
-            dot.edge('MOF', 'EER', style='dashed', color='saddlebrown', constraint='false')
 
             with dot.subgraph(name='cluster_equip') as c:
                 c.attr(style='dashed', color='gray') 
@@ -184,8 +177,8 @@ with col2:
 
                 for i, eq in enumerate(st.session_state.equipments):
                     if eq['has_w']:
-                        dot.edge('PROCESS', f'W_{i}') # 자연스럽게 뻗어나가도록 설정
-                        c.edge(f'W_{i}', f'EQ_{i}', weight='100') # W와 설비는 무조건 수직
+                        dot.edge('PROCESS', f'W_{i}') 
+                        c.edge(f'W_{i}', f'EQ_{i}', weight='100') 
                         dot.edge(eq['rtu'], f'W_{i}', style='dashed', color='blue', constraint='false')
                     else:
                         dot.edge('PROCESS', f'EQ_{i}')
@@ -199,7 +192,7 @@ with col2:
         # ---------------------------------------------------------
         else:
             dot = graphviz.Digraph(format='png')
-            dot.attr(newrank='true') # 범례 찢어짐 원천 차단
+            dot.attr(newrank='true')
             dot.attr(rankdir='TB', splines='ortho', fontname='NanumGothic', nodesep='0.15', ranksep='0.5')
             dot.attr('node', fontname='NanumGothic', fontsize='10')
 
@@ -218,12 +211,13 @@ with col2:
                 items =[('w', '전력량계'), ('r', 'RTU'), ('exist', '기존설비'), ('eff', '효율설비'), ('link', '연동설비')]
                 img_map = {'w': '전력량계.png', 'r': 'RTU.png', 'exist': '기존공기압축기.png', 'eff': '효율공기압축기.png', 'link': '기존공기압축기.png'}
                 
+                #[수정 2] 테마 2 범례 아이콘 크기를 거의 2배(0.45)로 키워서 위아래 여백을 꽉 채움
                 for key, text in items:
                     img_path = os.path.join(BASE_DIR, img_map[key]).replace('\\', '/')
                     if os.path.exists(img_path):
-                        leg.node(f'leg_i_{key}', '', shape='none', image=img_path, imagescale='true', fixedsize='true', width='0.25', height='0.25')
+                        leg.node(f'leg_i_{key}', '', shape='none', image=img_path, imagescale='true', fixedsize='true', width='0.45', height='0.45')
                     else:
-                        leg.node(f'leg_i_{key}', 'X', shape='box', color='red', width='0.25', height='0.25', fixedsize='true')
+                        leg.node(f'leg_i_{key}', 'X', shape='box', color='red', width='0.45', height='0.45', fixedsize='true')
                     
                     leg.node(f'leg_t_{key}', text, shape='none', fontsize='10', margin='0', width='0', height='0')
 
@@ -237,7 +231,6 @@ with col2:
                 for i in range(len(items)-1):
                     leg.edge(f'leg_i_{items[i][0]}', f'leg_i_{items[i+1][0]}', style='invis', weight='100')
 
-            # 한전과 범례 초밀착 정렬
             with dot.subgraph() as top_align:
                 top_align.attr(rank='same')
                 top_align.node('leg_i_w') 
@@ -266,21 +259,19 @@ with col2:
                 draw_v2_node('EER', '', 'EER.png', '1.5', '1.0')
                 
                 if rtu_count > 0:
-                    s_mid.edge('PROCESS', rtu_nodes[0], style='invis', minlen='2')
+                    s_mid.edge('PROCESS', rtu_nodes[0], style='invis', minlen='3')
                     for r in range(rtu_count - 1):
-                        s_mid.edge(rtu_nodes[r], rtu_nodes[r+1], style='invis', minlen='1')
-                    s_mid.edge(rtu_nodes[-1], 'EER', style='invis', minlen='2')
+                        s_mid.edge(rtu_nodes[r], rtu_nodes[r+1], style='invis', minlen='2')
+                    s_mid.edge(rtu_nodes[-1], 'EER', style='invis', minlen='3')
                 else:
-                    s_mid.edge('PROCESS', 'EER', style='invis', minlen='3')
+                    s_mid.edge('PROCESS', 'EER', style='invis', minlen='4')
 
             dot.edge('MOF', 'PROCESS', weight='100')
             
-            # 꼬임 방지를 위한 점선 제어
+            # [수정 1] 불필요한 MOF 점선 삭제 (테마 2도 동일 적용)
             for r in range(rtu_count):
                 rtu_name = f"RTU-{r+1}"
-                dot.edge('MOF', rtu_name, style='dashed', color='saddlebrown', constraint='false')
                 dot.edge(rtu_name, 'EER', style='dashed', color='red', constraint='false')
-            dot.edge('MOF', 'EER', style='dashed', color='saddlebrown', constraint='false')
 
             with dot.subgraph(name='cluster_equip') as c:
                 c.attr(style='dashed', color='gray') 
@@ -301,7 +292,7 @@ with col2:
                         draw_v2_node(f'EQ_{i}', eq_label, img_file, '1.2', '1.0')
                     
                     for i in range(len(st.session_state.equipments) - 1):
-                        s_eq.edge(f'EQ_{i}', f'EQ_{i+1}', style='invis')
+                        s_eq.edge(f'EQ_{i}', f'EQ_{i+1}', style='invis', minlen='3')
 
                 for i, eq in enumerate(st.session_state.equipments):
                     if eq['has_w']:
