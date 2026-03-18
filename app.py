@@ -86,36 +86,34 @@ with col2:
     if st.session_state.equipments:
         
         # ---------------------------------------------------------
-        # 🟢[버전 1] 기본 도형 테마
+        # 🟢 [버전 1] 기본 도형 테마
         # ---------------------------------------------------------
         if theme == "기본 도형 (버전 1)":
             dot = graphviz.Digraph(format='png')
-            #[수정] nodesep='0.2'로 대폭 축소하여 가로 간격을 오밀조밀하게 만듦
-            dot.attr(rankdir='TB', splines='ortho', fontname='NanumGothic', nodesep='0.2', ranksep='0.6')
+            # [간격 대폭 축소] 좌우(nodesep)와 위아래(ranksep) 간격을 쫀쫀하게 조입니다.
+            dot.attr(rankdir='TB', splines='ortho', fontname='NanumGothic', nodesep='0.15', ranksep='0.35')
             dot.attr('node', fontname='NanumGothic', shape='box', style='filled', fillcolor='white', fontsize='9')
 
-            # [해결] 투명한 유령 닻(Anchor)을 만들어 한전과 같은 층에 둡니다. (범례 찢어짐 원천 차단)
             with dot.subgraph() as top_align:
                 top_align.attr(rank='same')
                 top_align.node('leg_anchor', shape='none', label='', width='0', height='0', margin='0')
                 top_align.node('KEPCO', '한전', fillcolor='#FFD700', width='1.0')
-                # 닻과 한전 사이를 투명선으로 밀어내서 여백을 만듦
                 top_align.edge('leg_anchor', 'KEPCO', style='invis', minlen='3')
 
-            # 범례 클러스터 (이젠 한전과 직접 묶이지 않아 모양이 절대 안 깨짐)
             with dot.subgraph(name='cluster_legend') as leg:
-                leg.attr(style='solid', color='black', margin='10') # 범례 글자 삭제
+                leg.attr(style='solid', color='black', margin='8') 
                 items =[('w', '전력량계'), ('r', 'RTU'), ('exist', '기존설비'), ('eff', '효율설비'), ('link', '연동설비')]
                 
+                #[해결] 아이콘 크기 고정 및 연동설비 '회색' 처리
                 for key, text in items:
-                    if key == 'w': leg.node(f'leg_i_{key}', 'W', shape='circle', width='0.3', style='filled', fillcolor='white')
-                    elif key == 'r': leg.node(f'leg_i_{key}', 'R', shape='square', color='coral', fontcolor='red', style='bold,filled', fillcolor='white', width='0.3')
-                    elif key == 'exist': leg.node(f'leg_i_{key}', '', shape='box', style='filled', fillcolor='#B0C4DE', width='0.4', height='0.3')
-                    elif key == 'eff': leg.node(f'leg_i_{key}', '', shape='box', style='filled', fillcolor='#C1E1C1', width='0.4', height='0.3')
-                    elif key == 'link': leg.node(f'leg_i_{key}', '', shape='box', style='filled', fillcolor='#B0C4DE', width='0.4', height='0.3')
+                    if key == 'w': leg.node(f'leg_i_{key}', 'W', shape='circle', width='0.25', height='0.25', fixedsize='true', style='filled', fillcolor='white')
+                    elif key == 'r': leg.node(f'leg_i_{key}', 'R', shape='square', color='coral', fontcolor='red', style='bold,filled', fillcolor='white', width='0.25', height='0.25', fixedsize='true')
+                    elif key == 'exist': leg.node(f'leg_i_{key}', '', shape='box', style='filled', fillcolor='#B0C4DE', width='0.3', height='0.25', fixedsize='true')
+                    elif key == 'eff': leg.node(f'leg_i_{key}', '', shape='box', style='filled', fillcolor='#C1E1C1', width='0.3', height='0.25', fixedsize='true')
+                    elif key == 'link': leg.node(f'leg_i_{key}', '', shape='box', style='filled', fillcolor='#D3D3D3', width='0.3', height='0.25', fixedsize='true') # 회색
                     
-                    # margin='0.05'로 글자와 아이콘 사이의 불필요한 공백을 깎아냄
-                    leg.node(f'leg_t_{key}', text, shape='none', fontsize='10', fillcolor='transparent', margin='0.05')
+                    # margin='0.02'로 글자가 도형 옆에 찰싹 달라붙게 만듦
+                    leg.node(f'leg_t_{key}', text, shape='none', fontsize='10', fillcolor='transparent', margin='0.02')
 
                 for key, text in items:
                     with leg.subgraph() as row:
@@ -128,7 +126,6 @@ with col2:
                     leg.edge(f'leg_i_{items[i][0]}', f'leg_i_{items[i+1][0]}', style='invis', weight='100')
                     leg.edge(f'leg_t_{items[i][0]}', f'leg_t_{items[i+1][0]}', style='invis', weight='100')
 
-            # 유령 닻 바로 밑에 범례를 매달아 정확한 좌측 상단 위치에 고정
             dot.edge('leg_anchor', 'leg_i_w', style='invis', weight='100')
 
             dot.node('MOF', 'MOF', fillcolor='#E0E0E0', width='1.0')
@@ -159,7 +156,8 @@ with col2:
 
             with dot.subgraph(name='cluster_equip') as c:
                 c.attr(style='dashed', color='gray') 
-                color_map = {"기존설비": "#B0C4DE", "효율설비": "#C1E1C1", "연동설비": "#B0C4DE"}
+                # 메인 도면에서도 연동설비는 회색(#D3D3D3)으로 적용
+                color_map = {"기존설비": "#B0C4DE", "효율설비": "#C1E1C1", "연동설비": "#D3D3D3"} 
                 
                 with c.subgraph() as s_w:
                     s_w.attr(rank='same')
@@ -195,8 +193,8 @@ with col2:
         # ---------------------------------------------------------
         else:
             dot = graphviz.Digraph(format='png')
-            # [수정] 미친듯한 팽창의 주범이었던 dpi 옵션 삭제, 간격(nodesep) 축소
-            dot.attr(rankdir='TB', splines='ortho', fontname='NanumGothic', nodesep='0.2', ranksep='0.6')
+            # V2 역시 좌우/상하 간격을 대폭 줄여서 전체적으로 컴팩트하게 만듦
+            dot.attr(rankdir='TB', splines='ortho', fontname='NanumGothic', nodesep='0.15', ranksep='0.35')
             dot.attr('node', fontname='NanumGothic', fontsize='10')
 
             def draw_v2_node(node_id, label, v2_img, v2_w, v2_h):
@@ -209,12 +207,10 @@ with col2:
                     else:
                         dot.node(node_id, f"[이미지 누락]\n{v2_img}", shape='box', color='red', fontcolor='red')
 
-            # [해결] 투명한 유령 닻(Anchor)을 만들어 한전과 위치 세팅
             with dot.subgraph() as top_align:
                 top_align.attr(rank='same')
                 top_align.node('leg_anchor', shape='none', label='', width='0', height='0', margin='0')
                 
-                # 한전 노드를 이 그룹 안에서 생성해야 정렬이 안 깨집니다
                 img_path = os.path.join(BASE_DIR, '한전.png').replace('\\', '/')
                 if os.path.exists(img_path):
                     top_align.node('KEPCO', '', shape='none', image=img_path, labelloc='b', imagescale='true', fixedsize='true', width='1.2', height='0.6')
@@ -223,21 +219,21 @@ with col2:
                 
                 top_align.edge('leg_anchor', 'KEPCO', style='invis', minlen='3')
 
-            # 범례 클러스터
             with dot.subgraph(name='cluster_legend') as leg:
-                leg.attr(style='solid', color='black', margin='10') # 범례 글자 삭제
+                leg.attr(style='solid', color='black', margin='8') 
                 items =[('w', '전력량계'), ('r', 'RTU'), ('exist', '기존설비'), ('eff', '효율설비'), ('link', '연동설비')]
                 img_map = {'w': '전력량계.png', 'r': 'RTU.png', 'exist': '기존공기압축기.png', 'eff': '효율공기압축기.png', 'link': '기존공기압축기.png'}
                 
+                # V2 범례 아이콘도 고정 사이즈를 더 줄임 (0.25)
                 for key, text in items:
                     img_path = os.path.join(BASE_DIR, img_map[key]).replace('\\', '/')
                     if os.path.exists(img_path):
-                        leg.node(f'leg_i_{key}', '', shape='none', image=img_path, imagescale='true', fixedsize='true', width='0.4', height='0.4')
+                        leg.node(f'leg_i_{key}', '', shape='none', image=img_path, imagescale='true', fixedsize='true', width='0.25', height='0.25')
                     else:
-                        leg.node(f'leg_i_{key}', 'X', shape='box', color='red', width='0.3', height='0.3')
+                        leg.node(f'leg_i_{key}', 'X', shape='box', color='red', width='0.25', height='0.25', fixedsize='true')
                     
-                    # 여백 축소
-                    leg.node(f'leg_t_{key}', text, shape='none', fontsize='10', margin='0.05')
+                    # 글자 여백 최소화
+                    leg.node(f'leg_t_{key}', text, shape='none', fontsize='10', margin='0.02')
 
                 for key, text in items:
                     with leg.subgraph() as row:
@@ -250,7 +246,6 @@ with col2:
                     leg.edge(f'leg_i_{items[i][0]}', f'leg_i_{items[i+1][0]}', style='invis', weight='100')
                     leg.edge(f'leg_t_{items[i][0]}', f'leg_t_{items[i+1][0]}', style='invis', weight='100')
 
-            # 닻 밑에 범례 매달기
             dot.edge('leg_anchor', 'leg_i_w', style='invis', weight='100')
 
             draw_v2_node('MOF', '', 'MOF.png', '1.2', '0.6')
