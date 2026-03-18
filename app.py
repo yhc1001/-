@@ -86,20 +86,27 @@ with col2:
     if st.session_state.equipments:
         
         # ---------------------------------------------------------
-        # 🟢 [버전 1] 기본 도형 테마
+        # 🟢[버전 1] 기본 도형 테마
         # ---------------------------------------------------------
         if theme == "기본 도형 (버전 1)":
             dot = graphviz.Digraph(format='png')
-            #[해결 3] nodesep 축소 (0.4) -> 아이콘과 글자 사이 간격이 오밀조밀하게 좁혀집니다.
-            dot.attr(rankdir='TB', splines='ortho', fontname='NanumGothic', nodesep='0.4', ranksep='0.7')
+            #[수정] nodesep='0.2'로 대폭 축소하여 가로 간격을 오밀조밀하게 만듦
+            dot.attr(rankdir='TB', splines='ortho', fontname='NanumGothic', nodesep='0.2', ranksep='0.6')
             dot.attr('node', fontname='NanumGothic', shape='box', style='filled', fillcolor='white', fontsize='9')
 
+            # [해결] 투명한 유령 닻(Anchor)을 만들어 한전과 같은 층에 둡니다. (범례 찢어짐 원천 차단)
+            with dot.subgraph() as top_align:
+                top_align.attr(rank='same')
+                top_align.node('leg_anchor', shape='none', label='', width='0', height='0', margin='0')
+                top_align.node('KEPCO', '한전', fillcolor='#FFD700', width='1.0')
+                # 닻과 한전 사이를 투명선으로 밀어내서 여백을 만듦
+                top_align.edge('leg_anchor', 'KEPCO', style='invis', minlen='3')
+
+            # 범례 클러스터 (이젠 한전과 직접 묶이지 않아 모양이 절대 안 깨짐)
             with dot.subgraph(name='cluster_legend') as leg:
-                # [해결 1] 범례 라벨 삭제
-                leg.attr(style='solid', color='black', margin='10') 
+                leg.attr(style='solid', color='black', margin='10') # 범례 글자 삭제
                 items =[('w', '전력량계'), ('r', 'RTU'), ('exist', '기존설비'), ('eff', '효율설비'), ('link', '연동설비')]
                 
-                # [해결 2] 노드 강제 선언 -> 텍스트가 바깥으로 튀어나가는 버그 원천 차단
                 for key, text in items:
                     if key == 'w': leg.node(f'leg_i_{key}', 'W', shape='circle', width='0.3', style='filled', fillcolor='white')
                     elif key == 'r': leg.node(f'leg_i_{key}', 'R', shape='square', color='coral', fontcolor='red', style='bold,filled', fillcolor='white', width='0.3')
@@ -107,10 +114,9 @@ with col2:
                     elif key == 'eff': leg.node(f'leg_i_{key}', '', shape='box', style='filled', fillcolor='#C1E1C1', width='0.4', height='0.3')
                     elif key == 'link': leg.node(f'leg_i_{key}', '', shape='box', style='filled', fillcolor='#B0C4DE', width='0.4', height='0.3')
                     
-                    # 배경을 투명하게 해서 텍스트만 깔끔하게 나오게 설정
-                    leg.node(f'leg_t_{key}', text, shape='none', fontsize='10', fillcolor='transparent')
+                    # margin='0.05'로 글자와 아이콘 사이의 불필요한 공백을 깎아냄
+                    leg.node(f'leg_t_{key}', text, shape='none', fontsize='10', fillcolor='transparent', margin='0.05')
 
-                # 가로 정렬
                 for key, text in items:
                     with leg.subgraph() as row:
                         row.attr(rank='same')
@@ -118,16 +124,12 @@ with col2:
                         row.node(f'leg_t_{key}')
                         row.edge(f'leg_i_{key}', f'leg_t_{key}', style='invis')
 
-                # [해결 4] 세로 줄을 강력한 무게추(weight=100)로 묶어 범례가 고무줄처럼 늘어나는 현상 방지
                 for i in range(len(items)-1):
                     leg.edge(f'leg_i_{items[i][0]}', f'leg_i_{items[i+1][0]}', style='invis', weight='100')
                     leg.edge(f'leg_t_{items[i][0]}', f'leg_t_{items[i+1][0]}', style='invis', weight='100')
 
-            with dot.subgraph() as top_align:
-                top_align.attr(rank='same')
-                top_align.node('leg_i_w') 
-                top_align.node('KEPCO', '한전', fillcolor='#FFD700', width='1.0')
-                top_align.edge('leg_t_w', 'KEPCO', style='invis', minlen='2')
+            # 유령 닻 바로 밑에 범례를 매달아 정확한 좌측 상단 위치에 고정
+            dot.edge('leg_anchor', 'leg_i_w', style='invis', weight='100')
 
             dot.node('MOF', 'MOF', fillcolor='#E0E0E0', width='1.0')
             dot.edge('KEPCO', 'MOF')
@@ -189,12 +191,12 @@ with col2:
 
 
         # ---------------------------------------------------------
-        # 🔴 [버전 2] 캔바 커스텀 아이콘 테마
+        # 🔴[버전 2] 캔바 커스텀 아이콘 테마
         # ---------------------------------------------------------
         else:
             dot = graphviz.Digraph(format='png')
-            # V2 해상도 및 간격(nodesep) 축소 적용
-            dot.attr(rankdir='TB', splines='ortho', fontname='NanumGothic', nodesep='0.4', ranksep='0.7')
+            # [수정] 미친듯한 팽창의 주범이었던 dpi 옵션 삭제, 간격(nodesep) 축소
+            dot.attr(rankdir='TB', splines='ortho', fontname='NanumGothic', nodesep='0.2', ranksep='0.6')
             dot.attr('node', fontname='NanumGothic', fontsize='10')
 
             def draw_v2_node(node_id, label, v2_img, v2_w, v2_h):
@@ -207,8 +209,23 @@ with col2:
                     else:
                         dot.node(node_id, f"[이미지 누락]\n{v2_img}", shape='box', color='red', fontcolor='red')
 
+            # [해결] 투명한 유령 닻(Anchor)을 만들어 한전과 위치 세팅
+            with dot.subgraph() as top_align:
+                top_align.attr(rank='same')
+                top_align.node('leg_anchor', shape='none', label='', width='0', height='0', margin='0')
+                
+                # 한전 노드를 이 그룹 안에서 생성해야 정렬이 안 깨집니다
+                img_path = os.path.join(BASE_DIR, '한전.png').replace('\\', '/')
+                if os.path.exists(img_path):
+                    top_align.node('KEPCO', '', shape='none', image=img_path, labelloc='b', imagescale='true', fixedsize='true', width='1.2', height='0.6')
+                else:
+                    top_align.node('KEPCO', "[이미지 누락]\n한전.png", shape='box', color='red', fontcolor='red')
+                
+                top_align.edge('leg_anchor', 'KEPCO', style='invis', minlen='3')
+
+            # 범례 클러스터
             with dot.subgraph(name='cluster_legend') as leg:
-                leg.attr(style='solid', color='black', margin='10') 
+                leg.attr(style='solid', color='black', margin='10') # 범례 글자 삭제
                 items =[('w', '전력량계'), ('r', 'RTU'), ('exist', '기존설비'), ('eff', '효율설비'), ('link', '연동설비')]
                 img_map = {'w': '전력량계.png', 'r': 'RTU.png', 'exist': '기존공기압축기.png', 'eff': '효율공기압축기.png', 'link': '기존공기압축기.png'}
                 
@@ -219,7 +236,8 @@ with col2:
                     else:
                         leg.node(f'leg_i_{key}', 'X', shape='box', color='red', width='0.3', height='0.3')
                     
-                    leg.node(f'leg_t_{key}', text, shape='none', fontsize='10')
+                    # 여백 축소
+                    leg.node(f'leg_t_{key}', text, shape='none', fontsize='10', margin='0.05')
 
                 for key, text in items:
                     with leg.subgraph() as row:
@@ -228,16 +246,12 @@ with col2:
                         row.node(f'leg_t_{key}')
                         row.edge(f'leg_i_{key}', f'leg_t_{key}', style='invis')
 
-                #[해결 4] V2 범례 세로 줄 강력 고정 (폭발적 팽창 방지)
                 for i in range(len(items)-1):
                     leg.edge(f'leg_i_{items[i][0]}', f'leg_i_{items[i+1][0]}', style='invis', weight='100')
                     leg.edge(f'leg_t_{items[i][0]}', f'leg_t_{items[i+1][0]}', style='invis', weight='100')
 
-            with dot.subgraph() as top_align:
-                top_align.attr(rank='same')
-                top_align.node('leg_i_w')
-                draw_v2_node('KEPCO', '', '한전.png', '1.2', '0.6')
-                top_align.edge('leg_t_w', 'KEPCO', style='invis', minlen='2')
+            # 닻 밑에 범례 매달기
+            dot.edge('leg_anchor', 'leg_i_w', style='invis', weight='100')
 
             draw_v2_node('MOF', '', 'MOF.png', '1.2', '0.6')
             draw_v2_node('EER', '', 'EER.png', '1.5', '1.0')
@@ -296,7 +310,7 @@ with col2:
                         dot.edge('PROCESS', f'EQ_{i}', weight='10')
 
             png_data = dot.pipe(format='png')
-            st.image(png_data) 
+            st.image(png_data, use_container_width=False) 
             st.download_button("📥 이미지 다운로드 (버전 2)", data=png_data, file_name="계측구성도_버전2.png", mime="image/png")
 
     else:
