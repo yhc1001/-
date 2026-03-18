@@ -90,15 +90,14 @@ with col2:
         # ---------------------------------------------------------
         if theme == "기본 도형 (버전 1)":
             dot = graphviz.Digraph(format='png')
-            # [핵심 1] 전체 기본 여백을 0.1(좌우), 0.2(상하)로 타이트하게 조임
-            dot.attr(rankdir='TB', splines='ortho', fontname='NanumGothic', nodesep='0.1', ranksep='0.2')
+            # [해결 1] 범례 가출 방지를 위한 글로벌 속성 (매우 중요)
+            dot.attr(newrank='true')
+            # 적당한 상하 간격(0.5)과 좁은 좌우 간격(0.15) 세팅
+            dot.attr(rankdir='TB', splines='ortho', fontname='NanumGothic', nodesep='0.15', ranksep='0.5')
             dot.attr('node', fontname='NanumGothic', shape='box', style='filled', fillcolor='white', fontsize='9')
 
-            dot.node('KEPCO', '한전', fillcolor='#FFD700', width='1.0')
-            dot.node('MOF', 'MOF', fillcolor='#E0E0E0', width='1.0')
-
             with dot.subgraph(name='cluster_legend') as leg:
-                leg.attr(style='solid', color='black', margin='5') 
+                leg.attr(style='solid', color='black', margin='8') 
                 items =[('w', '전력량계'), ('r', 'RTU'), ('exist', '기존설비'), ('eff', '효율설비'), ('link', '연동설비')]
                 
                 for key, text in items:
@@ -108,53 +107,59 @@ with col2:
                     elif key == 'eff': leg.node(f'leg_i_{key}', '', shape='box', style='filled', fillcolor='#C1E1C1', width='0.3', height='0.25', fixedsize='true')
                     elif key == 'link': leg.node(f'leg_i_{key}', '', shape='box', style='filled', fillcolor='#D3D3D3', width='0.3', height='0.25', fixedsize='true') 
                     
-                    # [핵심 2] 텍스트의 투명 여백을 완전히 삭제 (margin='0,0', width='0', height='0') -> 초밀착
-                    leg.node(f'leg_t_{key}', text, shape='none', fontsize='10', fillcolor='transparent', margin='0,0', width='0', height='0')
+                    # 텍스트 여백을 최소화하여 아이콘과 초밀착
+                    leg.node(f'leg_t_{key}', text, shape='none', fontsize='10', fillcolor='transparent', margin='0', width='0', height='0')
 
                 for key, text in items:
                     with leg.subgraph() as row:
                         row.attr(rank='same')
                         row.node(f'leg_i_{key}')
                         row.node(f'leg_t_{key}')
-                        row.edge(f'leg_i_{key}', f'leg_t_{key}', style='invis', minlen='1') # 아이콘과 글자 찰싹 붙음
+                        row.edge(f'leg_i_{key}', f'leg_t_{key}', style='invis', minlen='1')
 
                 for i in range(len(items)-1):
-                    leg.edge(f'leg_i_{items[i][0]}', f'leg_i_{items[i+1][0]}', style='invis', weight='100', minlen='1')
+                    leg.edge(f'leg_i_{items[i][0]}', f'leg_i_{items[i+1][0]}', style='invis', weight='100')
 
-            #[핵심 3] 범례 박스 찢어짐 가출 방지! (가장 안전한 원시 명령어 주입 방식)
-            dot.edge('leg_t_w', 'KEPCO', style='invis', minlen='4') # 한전을 우측으로 4칸 밀어냄
-            dot.body.append('\t{ rank=same; "leg_i_w"; "leg_t_w"; "KEPCO" }\n') # 머리채를 같은 줄에 강제 고정
+            # [해결 2] 한전 노드를 범례 텍스트와 완벽히 같은 줄에 고정 (가출 현상 없음)
+            with dot.subgraph() as top_align:
+                top_align.attr(rank='same')
+                top_align.node('leg_i_w') 
+                top_align.node('KEPCO', '한전', fillcolor='#FFD700', width='1.0')
+                top_align.edge('leg_i_w', 'KEPCO', style='invis', minlen='4') # 우측으로 밀어냄
 
-            # [핵심 4] 우측 구성도 상하/좌우 넓게 펼치기 (minlen=3)
-            dot.edge('KEPCO', 'MOF', minlen='3')
+            dot.node('MOF', 'MOF', fillcolor='#E0E0E0', width='1.0')
+            dot.edge('KEPCO', 'MOF', weight='100') # 수직 뼈대 강화
 
+            # [해결 3] 공정, RTU, EER 서버를 완벽한 일렬횡대로 묶음
             with dot.subgraph() as s_mid:
                 s_mid.attr(rank='same')
                 s_mid.node('PROCESS', process_name, fillcolor='#E0E0E0', width='1.0')
+                
                 rtu_nodes =[]
                 for r in range(rtu_count):
                     rtu_name = f"RTU-{r+1}"
                     s_mid.node(rtu_name, 'R', shape='square', color='coral', fontcolor='red', style='bold,filled', fillcolor='white', width='0.3')
                     rtu_nodes.append(rtu_name)
                 
-                # EER 서버를 허공에 띄우지 않고 공정/RTU와 일렬횡대로 세워 도면 꼬임 방지
                 s_mid.node('EER', 'EER 서버\n(한국에너지공단)', fillcolor='#ADD8E6', width='1.2')
                 
+                # 좌우 배치 간격 설정
                 if rtu_count > 0:
-                    s_mid.edge('PROCESS', rtu_nodes[0], style='invis', minlen='3')
+                    s_mid.edge('PROCESS', rtu_nodes[0], style='invis', minlen='2')
                     for r in range(rtu_count - 1):
-                        s_mid.edge(rtu_nodes[r], rtu_nodes[r+1], style='invis', minlen='2')
-                    s_mid.edge(rtu_nodes[-1], 'EER', style='invis', minlen='3')
+                        s_mid.edge(rtu_nodes[r], rtu_nodes[r+1], style='invis', minlen='1')
+                    s_mid.edge(rtu_nodes[-1], 'EER', style='invis', minlen='2')
                 else:
-                    s_mid.edge('PROCESS', 'EER', style='invis', minlen='4')
+                    s_mid.edge('PROCESS', 'EER', style='invis', minlen='3')
 
-            dot.edge('MOF', 'PROCESS', minlen='3')
-            dot.edge('MOF', 'EER', style='dashed', color='saddlebrown', constraint='false')
+            dot.edge('MOF', 'PROCESS', weight='100') # 수직 뼈대 강화
             
+            # [해결 4] 통신선이 도면 구조를 파괴하지 못하게 constraint='false' 속성 부여 (꼬임 원천 차단)
             for r in range(rtu_count):
                 rtu_name = f"RTU-{r+1}"
-                dot.edge('MOF', rtu_name, style='dashed', color='saddlebrown', minlen='3')
+                dot.edge('MOF', rtu_name, style='dashed', color='saddlebrown', constraint='false')
                 dot.edge(rtu_name, 'EER', style='dashed', color='saddlebrown', constraint='false') 
+            dot.edge('MOF', 'EER', style='dashed', color='saddlebrown', constraint='false')
 
             with dot.subgraph(name='cluster_equip') as c:
                 c.attr(style='dashed', color='gray') 
@@ -175,26 +180,27 @@ with col2:
                                   fillcolor=color_map.get(eq['type']), style='filled', shape='box', width='0.8')
                     
                     for i in range(len(st.session_state.equipments) - 1):
-                        s_eq.edge(f'EQ_{i}', f'EQ_{i+1}', style='invis', minlen='3')
+                        s_eq.edge(f'EQ_{i}', f'EQ_{i+1}', style='invis')
 
                 for i, eq in enumerate(st.session_state.equipments):
                     if eq['has_w']:
-                        dot.edge('PROCESS', f'W_{i}', weight='10', minlen='3')
-                        c.edge(f'W_{i}', f'EQ_{i}', weight='10', minlen='3')
+                        dot.edge('PROCESS', f'W_{i}') # 자연스럽게 뻗어나가도록 설정
+                        c.edge(f'W_{i}', f'EQ_{i}', weight='100') # W와 설비는 무조건 수직
                         dot.edge(eq['rtu'], f'W_{i}', style='dashed', color='blue', constraint='false')
                     else:
-                        dot.edge('PROCESS', f'EQ_{i}', weight='10', minlen='6')
+                        dot.edge('PROCESS', f'EQ_{i}')
 
             st.graphviz_chart(dot)
             st.download_button("📥 이미지 다운로드 (버전 1)", data=dot.pipe(format='png'), file_name="계측구성도_버전1.png", mime="image/png")
 
 
         # ---------------------------------------------------------
-        # 🔴[버전 2] 캔바 커스텀 아이콘 테마
+        # 🔴 [버전 2] 캔바 커스텀 아이콘 테마
         # ---------------------------------------------------------
         else:
             dot = graphviz.Digraph(format='png')
-            dot.attr(rankdir='TB', splines='ortho', fontname='NanumGothic', nodesep='0.1', ranksep='0.2')
+            dot.attr(newrank='true') # 범례 찢어짐 원천 차단
+            dot.attr(rankdir='TB', splines='ortho', fontname='NanumGothic', nodesep='0.15', ranksep='0.5')
             dot.attr('node', fontname='NanumGothic', fontsize='10')
 
             def draw_v2_node(node_id, label, v2_img, v2_w, v2_h):
@@ -207,11 +213,8 @@ with col2:
                     else:
                         dot.node(node_id, f"[이미지 누락]\n{v2_img}", shape='box', color='red', fontcolor='red')
 
-            draw_v2_node('KEPCO', '', '한전.png', '1.2', '0.6')
-            draw_v2_node('MOF', '', 'MOF.png', '1.2', '0.6')
-
             with dot.subgraph(name='cluster_legend') as leg:
-                leg.attr(style='solid', color='black', margin='5') 
+                leg.attr(style='solid', color='black', margin='8') 
                 items =[('w', '전력량계'), ('r', 'RTU'), ('exist', '기존설비'), ('eff', '효율설비'), ('link', '연동설비')]
                 img_map = {'w': '전력량계.png', 'r': 'RTU.png', 'exist': '기존공기압축기.png', 'eff': '효율공기압축기.png', 'link': '기존공기압축기.png'}
                 
@@ -222,8 +225,7 @@ with col2:
                     else:
                         leg.node(f'leg_i_{key}', 'X', shape='box', color='red', width='0.25', height='0.25', fixedsize='true')
                     
-                    # 텍스트 초밀착 여백 제거
-                    leg.node(f'leg_t_{key}', text, shape='none', fontsize='10', margin='0,0', width='0', height='0')
+                    leg.node(f'leg_t_{key}', text, shape='none', fontsize='10', margin='0', width='0', height='0')
 
                 for key, text in items:
                     with leg.subgraph() as row:
@@ -233,13 +235,23 @@ with col2:
                         row.edge(f'leg_i_{key}', f'leg_t_{key}', style='invis', minlen='1')
 
                 for i in range(len(items)-1):
-                    leg.edge(f'leg_i_{items[i][0]}', f'leg_i_{items[i+1][0]}', style='invis', weight='100', minlen='1')
+                    leg.edge(f'leg_i_{items[i][0]}', f'leg_i_{items[i+1][0]}', style='invis', weight='100')
 
-            # 한전과 범례 초강력 정렬 (가출 방지)
-            dot.edge('leg_t_w', 'KEPCO', style='invis', minlen='4')
-            dot.body.append('\t{ rank=same; "leg_i_w"; "leg_t_w"; "KEPCO" }\n')
+            # 한전과 범례 초밀착 정렬
+            with dot.subgraph() as top_align:
+                top_align.attr(rank='same')
+                top_align.node('leg_i_w') 
+                
+                img_path = os.path.join(BASE_DIR, '한전.png').replace('\\', '/')
+                if os.path.exists(img_path):
+                    top_align.node('KEPCO', '', shape='none', image=img_path, labelloc='b', imagescale='true', fixedsize='true', width='1.2', height='0.6')
+                else:
+                    top_align.node('KEPCO', "[이미지 누락]\n한전.png", shape='box', color='red', fontcolor='red')
+                
+                top_align.edge('leg_i_w', 'KEPCO', style='invis', minlen='4')
 
-            dot.edge('KEPCO', 'MOF', minlen='3')
+            draw_v2_node('MOF', '', 'MOF.png', '1.2', '0.6')
+            dot.edge('KEPCO', 'MOF', weight='100')
 
             with dot.subgraph() as s_mid:
                 s_mid.attr(rank='same')
@@ -251,24 +263,24 @@ with col2:
                     draw_v2_node(rtu_name, '', 'RTU.png', '0.8', '0.8')
                     rtu_nodes.append(rtu_name)
                 
-                # V2에서도 EER 서버 일렬횡대 배치
                 draw_v2_node('EER', '', 'EER.png', '1.5', '1.0')
                 
                 if rtu_count > 0:
-                    s_mid.edge('PROCESS', rtu_nodes[0], style='invis', minlen='3')
+                    s_mid.edge('PROCESS', rtu_nodes[0], style='invis', minlen='2')
                     for r in range(rtu_count - 1):
-                        s_mid.edge(rtu_nodes[r], rtu_nodes[r+1], style='invis', minlen='2')
-                    s_mid.edge(rtu_nodes[-1], 'EER', style='invis', minlen='3')
+                        s_mid.edge(rtu_nodes[r], rtu_nodes[r+1], style='invis', minlen='1')
+                    s_mid.edge(rtu_nodes[-1], 'EER', style='invis', minlen='2')
                 else:
-                    s_mid.edge('PROCESS', 'EER', style='invis', minlen='4')
+                    s_mid.edge('PROCESS', 'EER', style='invis', minlen='3')
 
-            dot.edge('MOF', 'PROCESS', minlen='3')
-            dot.edge('MOF', 'EER', style='dashed', color='saddlebrown', constraint='false')
+            dot.edge('MOF', 'PROCESS', weight='100')
             
+            # 꼬임 방지를 위한 점선 제어
             for r in range(rtu_count):
                 rtu_name = f"RTU-{r+1}"
-                dot.edge('MOF', rtu_name, style='dashed', color='saddlebrown', minlen='3')
+                dot.edge('MOF', rtu_name, style='dashed', color='saddlebrown', constraint='false')
                 dot.edge(rtu_name, 'EER', style='dashed', color='red', constraint='false')
+            dot.edge('MOF', 'EER', style='dashed', color='saddlebrown', constraint='false')
 
             with dot.subgraph(name='cluster_equip') as c:
                 c.attr(style='dashed', color='gray') 
@@ -289,15 +301,15 @@ with col2:
                         draw_v2_node(f'EQ_{i}', eq_label, img_file, '1.2', '1.0')
                     
                     for i in range(len(st.session_state.equipments) - 1):
-                        s_eq.edge(f'EQ_{i}', f'EQ_{i+1}', style='invis', minlen='3')
+                        s_eq.edge(f'EQ_{i}', f'EQ_{i+1}', style='invis')
 
                 for i, eq in enumerate(st.session_state.equipments):
                     if eq['has_w']:
-                        dot.edge('PROCESS', f'W_{i}', weight='10', minlen='3')
-                        c.edge(f'W_{i}', f'EQ_{i}', weight='10', minlen='3')
+                        dot.edge('PROCESS', f'W_{i}')
+                        c.edge(f'W_{i}', f'EQ_{i}', weight='100')
                         dot.edge(eq['rtu'], f'W_{i}', style='solid', color='red', constraint='false')
                     else:
-                        dot.edge('PROCESS', f'EQ_{i}', weight='10', minlen='6')
+                        dot.edge('PROCESS', f'EQ_{i}')
 
             png_data = dot.pipe(format='png')
             st.image(png_data, use_container_width=False) 
