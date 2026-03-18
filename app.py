@@ -29,7 +29,6 @@ def add_equipment():
     })
     st.session_state.new_desc = f"#{len(st.session_state.equipments) + 1}"
 
-# [해결 핵심] 에러 화면(StreamlitAPIException)을 방지하는 안전한 초기화 함수
 def reset_all():
     st.session_state.equipments =[]
     st.session_state.new_desc = "#1"
@@ -64,8 +63,6 @@ with col1:
     st.selectbox("연결할 RTU", rtu_list, key='new_rtu')
     
     st.button("➕ 설비 추가", on_click=add_equipment, type="primary")
-
-    # on_click을 사용하여 에러 없이 안전하게 초기화
     st.button("🗑️ 전체 초기화", on_click=reset_all)
 
     st.markdown("---")
@@ -83,20 +80,46 @@ with col1:
             st.rerun()
 
 # ==========================================
-# 3. 다이어그램 렌더링 (V1과 V2를 완전히 분리)
+# 3. 다이어그램 렌더링
 # ==========================================
 with col2:
     if st.session_state.equipments:
         
         # ---------------------------------------------------------
-        # 🟢 [버전 1] 오리지널 코드 (100% 원본 그대로 보존, 수정 금지)
+        # 🟢 [버전 1] 기본 도형 테마
         # ---------------------------------------------------------
         if theme == "기본 도형 (버전 1)":
             dot = graphviz.Digraph(format='png')
             dot.attr(rankdir='TB', splines='ortho', fontname='NanumGothic', nodesep='0.4', ranksep='0.8')
             dot.attr('node', fontname='NanumGothic', shape='box', style='filled', fillcolor='white', fontsize='9')
 
-            dot.node('KEPCO', '한전', fillcolor='#FFD700', width='1.0')
+            # --- [추가] 버전 1 범례(Legend) 세팅 ---
+            with dot.subgraph(name='cluster_legend') as leg:
+                leg.attr(label='범례', fontsize='11', fontname='NanumGothic', style='solid', color='black', margin='8')
+                items =[('w', '전력량계'), ('r', 'RTU'), ('exist', '기존설비'), ('eff', '효율설비'), ('link', '연동설비')]
+                
+                for key, text in items:
+                    with leg.subgraph() as row:
+                        row.attr(rank='same')
+                        if key == 'w': row.node(f'leg_i_{key}', 'W', shape='circle', width='0.3', style='filled', fillcolor='white')
+                        elif key == 'r': row.node(f'leg_i_{key}', 'R', shape='square', color='coral', fontcolor='red', style='bold,filled', fillcolor='white', width='0.3')
+                        elif key == 'exist': row.node(f'leg_i_{key}', '', shape='box', style='filled', fillcolor='#B0C4DE', width='0.4', height='0.3')
+                        elif key == 'eff': row.node(f'leg_i_{key}', '', shape='box', style='filled', fillcolor='#C1E1C1', width='0.4', height='0.3')
+                        elif key == 'link': row.node(f'leg_i_{key}', '', shape='box', style='filled', fillcolor='#B0C4DE', width='0.4', height='0.3')
+                        
+                        row.node(f'leg_t_{key}', text, shape='none', fontsize='10')
+                        row.edge(f'leg_i_{key}', f'leg_t_{key}', style='invis') # 가로 정렬
+
+                # 세로 줄 맞추기
+                for i in range(len(items)-1):
+                    leg.edge(f'leg_i_{items[i][0]}', f'leg_i_{items[i+1][0]}', style='invis')
+
+            # --- 범례를 좌측 상단(한전 왼쪽)에 고정 ---
+            with dot.subgraph() as top_align:
+                top_align.attr(rank='same')
+                top_align.node('KEPCO', '한전', fillcolor='#FFD700', width='1.0')
+                top_align.edge('leg_t_w', 'KEPCO', style='invis', minlen='2') # 투명선으로 밀어내기
+
             dot.node('MOF', 'MOF', fillcolor='#E0E0E0', width='1.0')
             dot.edge('KEPCO', 'MOF')
 
@@ -125,7 +148,7 @@ with col2:
 
             with dot.subgraph(name='cluster_equip') as c:
                 c.attr(style='dashed', color='gray') 
-                color_map = {"기존설비": "#B0C4DE", "효율설비": "#C1E1C1", "연동설비": "#A9A9A9"}
+                color_map = {"기존설비": "#B0C4DE", "효율설비": "#C1E1C1", "연동설비": "#B0C4DE"}
                 
                 with c.subgraph() as s_w:
                     s_w.attr(rank='same')
@@ -152,17 +175,16 @@ with col2:
                     else:
                         dot.edge('PROCESS', f'EQ_{i}', weight='10')
 
-            # 버전 1 렌더링 (SVG 방식)
             st.graphviz_chart(dot)
             st.download_button("📥 이미지 다운로드 (버전 1)", data=dot.pipe(format='png'), file_name="계측구성도_버전1.png", mime="image/png")
 
 
         # ---------------------------------------------------------
-        # 🔴 [버전 2] 캔바 커스텀 아이콘 코드 (미친듯한 팽창 억제)
+        # 🔴[버전 2] 캔바 커스텀 아이콘 테마
         # ---------------------------------------------------------
         else:
             dot = graphviz.Digraph(format='png')
-            dot.attr(rankdir='TB', splines='ortho', fontname='NanumGothic', nodesep='0.6', ranksep='0.9')
+            dot.attr(rankdir='TB', splines='ortho', fontname='NanumGothic', nodesep='0.6', ranksep='0.9', dpi='200')
             dot.attr('node', fontname='NanumGothic', fontsize='10')
 
             def draw_v2_node(node_id, label, v2_img, v2_w, v2_h):
@@ -175,7 +197,34 @@ with col2:
                     else:
                         dot.node(node_id, f"[이미지 누락]\n{v2_img}", shape='box', color='red', fontcolor='red')
 
-            draw_v2_node('KEPCO', '', '한전.png', '1.2', '0.6')
+            # --- [추가] 버전 2 범례(Legend) 아이콘 세팅 ---
+            with dot.subgraph(name='cluster_legend') as leg:
+                leg.attr(label='범례', fontsize='11', fontname='NanumGothic', style='solid', color='black', margin='8')
+                items =[('w', '전력량계'), ('r', 'RTU'), ('exist', '기존설비'), ('eff', '효율설비'), ('link', '연동설비')]
+                img_map = {'w': '전력량계.png', 'r': 'RTU.png', 'exist': '기존공기압축기.png', 'eff': '효율공기압축기.png', 'link': '기존공기압축기.png'}
+                
+                for key, text in items:
+                    with leg.subgraph() as row:
+                        row.attr(rank='same')
+                        img_path = os.path.join(BASE_DIR, img_map[key]).replace('\\', '/')
+                        if os.path.exists(img_path):
+                            row.node(f'leg_i_{key}', '', shape='none', image=img_path, imagescale='true', fixedsize='true', width='0.4', height='0.4')
+                        else:
+                            row.node(f'leg_i_{key}', 'X', shape='box', color='red', width='0.3', height='0.3')
+                        
+                        row.node(f'leg_t_{key}', text, shape='none', fontsize='10')
+                        row.edge(f'leg_i_{key}', f'leg_t_{key}', style='invis') # 가로 정렬
+
+                # 세로 줄 맞추기
+                for i in range(len(items)-1):
+                    leg.edge(f'leg_i_{items[i][0]}', f'leg_i_{items[i+1][0]}', style='invis')
+
+            # --- 범례를 좌측 상단(한전 왼쪽)에 고정 ---
+            with dot.subgraph() as top_align:
+                top_align.attr(rank='same')
+                draw_v2_node('KEPCO', '', '한전.png', '1.2', '0.6')
+                top_align.edge('leg_t_w', 'KEPCO', style='invis', minlen='2') # 투명선으로 밀어내기
+
             draw_v2_node('MOF', '', 'MOF.png', '1.2', '0.6')
             draw_v2_node('EER', '', 'EER.png', '1.5', '1.0')
 
@@ -232,9 +281,8 @@ with col2:
                     else:
                         dot.edge('PROCESS', f'EQ_{i}', weight='10')
 
-            # 버전 2 렌더링 (원래의 아담한 픽셀 크기로 엑스박스 없이 출력)
             png_data = dot.pipe(format='png')
-            st.image(png_data) # 크기를 폭발시키는 use_container_width 옵션 삭제
+            st.image(png_data) 
             st.download_button("📥 이미지 다운로드 (버전 2)", data=png_data, file_name="계측구성도_버전2.png", mime="image/png")
 
     else:
