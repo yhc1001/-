@@ -1,10 +1,42 @@
 import streamlit as st
 import graphviz
 import os
+import shutil
+import tempfile
 
 st.set_page_config(page_title="계측구성도 설계기", layout="wide")
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+GRAPHVIZ_ASSET_PATH = os.path.join(tempfile.gettempdir(), "meter_diagram_graphviz_assets")
+IMAGE_ALIASES = {
+    'EER.png': 'eer.png',
+    'MOF.png': 'mof.png',
+    'RTU.png': 'rtu.png',
+    '한전.png': 'kepco.png',
+    '전력량계.png': 'wattmeter.png',
+    '기존공기압축기.png': 'compressor_existing.png',
+    '효율공기압축기.png': 'compressor_efficiency.png',
+}
+
+def ensure_graphviz_assets():
+    os.makedirs(GRAPHVIZ_ASSET_PATH, exist_ok=True)
+    for source_name, alias_name in IMAGE_ALIASES.items():
+        source_path = os.path.join(BASE_DIR, source_name)
+        alias_path = os.path.join(GRAPHVIZ_ASSET_PATH, alias_name)
+        if (
+            os.path.exists(source_path)
+            and (
+                not os.path.exists(alias_path)
+                or os.path.getmtime(source_path) > os.path.getmtime(alias_path)
+            )
+        ):
+            shutil.copyfile(source_path, alias_path)
+
+def graphviz_image_name(image_name):
+    alias_name = IMAGE_ALIASES.get(image_name, image_name)
+    return os.path.join(GRAPHVIZ_ASSET_PATH, alias_name).replace('\\', '/')
+
+ensure_graphviz_assets()
 
 # ==========================================
 # 1. 초기 세션 상태 설정
@@ -33,6 +65,34 @@ def reset_all():
     st.session_state.equipments =[]
     st.session_state.new_desc = "#1"
 
+def make_legend_label(legend_scale):
+    font_size = max(7, int(10 * legend_scale))
+    icon_size = max(12, int(18 * legend_scale))
+    return f'''<
+<TABLE BORDER="1" CELLBORDER="0" CELLSPACING="2" CELLPADDING="3">
+  <TR>
+    <TD WIDTH="{icon_size}" HEIGHT="{icon_size}"><FONT POINT-SIZE="{font_size}">W</FONT></TD>
+    <TD ALIGN="LEFT"><FONT POINT-SIZE="{font_size}">전력량계</FONT></TD>
+  </TR>
+  <TR>
+    <TD WIDTH="{icon_size}" HEIGHT="{icon_size}"><FONT POINT-SIZE="{font_size}" COLOR="red">R</FONT></TD>
+    <TD ALIGN="LEFT"><FONT POINT-SIZE="{font_size}">RTU</FONT></TD>
+  </TR>
+  <TR>
+    <TD WIDTH="{icon_size}" HEIGHT="{icon_size}" BGCOLOR="#B0C4DE"></TD>
+    <TD ALIGN="LEFT"><FONT POINT-SIZE="{font_size}">기존설비</FONT></TD>
+  </TR>
+  <TR>
+    <TD WIDTH="{icon_size}" HEIGHT="{icon_size}" BGCOLOR="#C1E1C1"></TD>
+    <TD ALIGN="LEFT"><FONT POINT-SIZE="{font_size}">효율설비</FONT></TD>
+  </TR>
+  <TR>
+    <TD WIDTH="{icon_size}" HEIGHT="{icon_size}" BGCOLOR="#D3D3D3"></TD>
+    <TD ALIGN="LEFT"><FONT POINT-SIZE="{font_size}">연동설비</FONT></TD>
+  </TR>
+</TABLE>
+>'''
+
 # ==========================================
 # 2. 메인 화면 레이아웃
 # ==========================================
@@ -41,6 +101,11 @@ col1, col2 = st.columns([1, 3])
 with col1:
     st.subheader("🎨 디자인 테마 선택")
     theme = st.radio("테마",["기본 도형 (버전 1)", "커스텀 아이콘 (버전 2)"], horizontal=True, label_visibility="collapsed")
+    
+    with st.expander("도면 세부 조정", expanded=True):
+        legend_scale = st.slider("범례 크기", min_value=0.55, max_value=1.00, value=0.70, step=0.05)
+        show_boundary = st.checkbox("사업장 경계 표시", value=True)
+        boundary_margin = st.slider("사업장 경계 여백", min_value=0, max_value=40, value=10, step=2)
     st.markdown("---")
 
     st.subheader("1. 공정 및 RTU 설정")
@@ -94,34 +159,13 @@ with col2:
             dot.attr(rankdir='TB', splines='ortho', fontname='NanumGothic', nodesep='0.15', ranksep='0.5')
             dot.attr('node', fontname='NanumGothic', shape='box', style='filled', fillcolor='white', fontsize='9')
 
-            with dot.subgraph(name='cluster_legend') as leg:
-                leg.attr(style='solid', color='black', margin='8') 
-                items =[('w', '전력량계'), ('r', 'RTU'), ('exist', '기존설비'), ('eff', '효율설비'), ('link', '연동설비')]
-                
-                for key, text in items:
-                    if key == 'w': leg.node(f'leg_i_{key}', 'W', shape='circle', width='0.25', height='0.25', fixedsize='true', style='filled', fillcolor='white')
-                    elif key == 'r': leg.node(f'leg_i_{key}', 'R', shape='square', color='coral', fontcolor='red', style='bold,filled', fillcolor='white', width='0.25', height='0.25', fixedsize='true')
-                    elif key == 'exist': leg.node(f'leg_i_{key}', '', shape='box', style='filled', fillcolor='#B0C4DE', width='0.3', height='0.25', fixedsize='true')
-                    elif key == 'eff': leg.node(f'leg_i_{key}', '', shape='box', style='filled', fillcolor='#C1E1C1', width='0.3', height='0.25', fixedsize='true')
-                    elif key == 'link': leg.node(f'leg_i_{key}', '', shape='box', style='filled', fillcolor='#D3D3D3', width='0.3', height='0.25', fixedsize='true') 
-                    
-                    leg.node(f'leg_t_{key}', text, shape='none', fontsize='10', fillcolor='transparent', margin='0', width='0', height='0')
-
-                for key, text in items:
-                    with leg.subgraph() as row:
-                        row.attr(rank='same')
-                        row.node(f'leg_i_{key}')
-                        row.node(f'leg_t_{key}')
-                        row.edge(f'leg_i_{key}', f'leg_t_{key}', style='invis', minlen='1')
-
-                for i in range(len(items)-1):
-                    leg.edge(f'leg_i_{items[i][0]}', f'leg_i_{items[i+1][0]}', style='invis', weight='100')
+            dot.node('LEGEND', make_legend_label(legend_scale), shape='plain')
 
             with dot.subgraph() as top_align:
                 top_align.attr(rank='same')
-                top_align.node('leg_i_w') 
+                top_align.node('LEGEND') 
                 top_align.node('KEPCO', '한전', fillcolor='#FFD700', width='1.0')
-                top_align.edge('leg_i_w', 'KEPCO', style='invis', minlen='4')
+                top_align.edge('LEGEND', 'KEPCO', style='invis', minlen='4')
 
             dot.node('MOF', 'MOF', fillcolor='#E0E0E0', width='1.0')
             dot.edge('KEPCO', 'MOF', weight='100')
@@ -155,7 +199,8 @@ with col2:
                 dot.edge(rtu_name, 'EER', style='dashed', color='saddlebrown', constraint='false') 
 
             with dot.subgraph(name='cluster_equip') as c:
-                c.attr(style='dashed', color='gray') 
+                boundary_style = 'dashed' if show_boundary else 'invis'
+                c.attr(style=boundary_style, color='gray', margin=str(boundary_margin)) 
                 color_map = {"기존설비": "#B0C4DE", "효율설비": "#C1E1C1", "연동설비": "#D3D3D3"} 
                 
                 with c.subgraph() as s_w:
@@ -200,48 +245,26 @@ with col2:
                 if v2_img == 'PROCESS_PILL':
                     dot.node(node_id, label, shape='box', style='rounded,filled', fillcolor='#E0E0E0', width='1.5', height='0.5')
                 else:
-                    img_path = os.path.join(BASE_DIR, v2_img).replace('\\', '/')
+                    img_path = os.path.join(BASE_DIR, v2_img)
+                    image_name = graphviz_image_name(v2_img)
                     if os.path.exists(img_path):
-                        dot.node(node_id, label, shape='none', image=img_path, labelloc='b', imagescale='true', fixedsize='true', width=v2_w, height=v2_h)
+                        dot.node(node_id, label, shape='none', image=image_name, labelloc='b', imagescale='true', fixedsize='true', width=v2_w, height=v2_h)
                     else:
                         dot.node(node_id, f"[이미지 누락]\n{v2_img}", shape='box', color='red', fontcolor='red')
 
-            with dot.subgraph(name='cluster_legend') as leg:
-                leg.attr(style='solid', color='black', margin='8') 
-                items =[('w', '전력량계'), ('r', 'RTU'), ('exist', '기존설비'), ('eff', '효율설비'), ('link', '연동설비')]
-                img_map = {'w': '전력량계.png', 'r': 'RTU.png', 'exist': '기존공기압축기.png', 'eff': '효율공기압축기.png', 'link': '기존공기압축기.png'}
-                
-                #[수정 2] 테마 2 범례 아이콘 크기를 거의 2배(0.45)로 키워서 위아래 여백을 꽉 채움
-                for key, text in items:
-                    img_path = os.path.join(BASE_DIR, img_map[key]).replace('\\', '/')
-                    if os.path.exists(img_path):
-                        leg.node(f'leg_i_{key}', '', shape='none', image=img_path, imagescale='true', fixedsize='true', width='0.45', height='0.45')
-                    else:
-                        leg.node(f'leg_i_{key}', 'X', shape='box', color='red', width='0.45', height='0.45', fixedsize='true')
-                    
-                    leg.node(f'leg_t_{key}', text, shape='none', fontsize='10', margin='0', width='0', height='0')
-
-                for key, text in items:
-                    with leg.subgraph() as row:
-                        row.attr(rank='same')
-                        row.node(f'leg_i_{key}')
-                        row.node(f'leg_t_{key}')
-                        row.edge(f'leg_i_{key}', f'leg_t_{key}', style='invis', minlen='1')
-
-                for i in range(len(items)-1):
-                    leg.edge(f'leg_i_{items[i][0]}', f'leg_i_{items[i+1][0]}', style='invis', weight='100')
+            dot.node('LEGEND', make_legend_label(legend_scale), shape='plain')
 
             with dot.subgraph() as top_align:
                 top_align.attr(rank='same')
-                top_align.node('leg_i_w') 
+                top_align.node('LEGEND') 
                 
-                img_path = os.path.join(BASE_DIR, '한전.png').replace('\\', '/')
+                img_path = os.path.join(BASE_DIR, '한전.png')
                 if os.path.exists(img_path):
-                    top_align.node('KEPCO', '', shape='none', image=img_path, labelloc='b', imagescale='true', fixedsize='true', width='1.2', height='0.6')
+                    top_align.node('KEPCO', '', shape='none', image=graphviz_image_name('한전.png'), labelloc='b', imagescale='true', fixedsize='true', width='1.2', height='0.6')
                 else:
                     top_align.node('KEPCO', "[이미지 누락]\n한전.png", shape='box', color='red', fontcolor='red')
                 
-                top_align.edge('leg_i_w', 'KEPCO', style='invis', minlen='4')
+                top_align.edge('LEGEND', 'KEPCO', style='invis', minlen='4')
 
             draw_v2_node('MOF', '', 'MOF.png', '1.2', '0.6')
             dot.edge('KEPCO', 'MOF', weight='100')
@@ -274,7 +297,8 @@ with col2:
                 dot.edge(rtu_name, 'EER', style='dashed', color='red', constraint='false')
 
             with dot.subgraph(name='cluster_equip') as c:
-                c.attr(style='dashed', color='gray') 
+                boundary_style = 'dashed' if show_boundary else 'invis'
+                c.attr(style=boundary_style, color='gray', margin=str(boundary_margin)) 
                 
                 with c.subgraph() as s_w:
                     s_w.attr(rank='same')
